@@ -1,0 +1,202 @@
+name: Terraform
+
+# Pull request  -> plan (read-only identity) -> plan posted as a PR comment
+# Push to main  -> plan (read-only) -> waits for approval in the "infra"
+#                  environment -> apply exactly that saved plan (admin identity)
+
+on:
+  pull_request:
+    paths:
+      - "infra/terraform/**"
+      - "infra/vm-startup.sh"
+      - ".github/workflows/terraform.yml"
+  push:
+    branches: [main]
+    paths:
+      - "infra/terraform/**"
+      - "infra/vm-startup.sh"
+      - ".github/workflows/terraform.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  # one run at a time per PR, and one at a time on main (never cancel an apply)
+  group: terraform-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: false
+
+env:
+  TF_VERSION: "1.16.5"
+  TF_IN_AUTOMATION: "true"
+  TF_INPUT: "false"
+  TF_VAR_project_id: ${{ vars.GCP_PROJECT_ID }}
+  TF_VAR_region: ${{ vars.GCP_REGION }}
+  TF_VAR_zone: ${{ vars.GCP_ZONE }}
+  TF_VAR_wif_pool_name: ${{ vars.GCP_WIF_POOL }}
+
+jobs:
+  plan:
+    name: terraform plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write        # GitHub OIDC token for GCP
+      pull-requests: write   # post the plan as a PR comment
+    defaults:
+      run:
+        working-directory: infra/terraform
+    outputs:
+      exitcode: ${{ steps.plan.outputs.exitcode }}
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Authenticate to Google Cloud (read-only tf-plan)
+        uses: google-github-actions/auth@v3
+        with:
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER_TF_PLAN }}
+          service_account: ${{ vars.GCP_TF_PLAN_SA }}
+
+      - uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          terraform_wrapper: false
+
+      - name: terraform fmt
+        run: terraform fmt -check -recursive -diff
+
+      - name: terraform init
+        run: terraform init -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}"
+
+      - name: terraform validate
+        run: terraform validate -no-color
+
+      # -lock=false: this identity can only read the state bucket.
+      # -detailed-exitcode: 0 = no changes, 2 = changes, 1 = error
+      - name: terraform plan
+        id: plan
+        run: |
+          set +e
+          terraform plan -lock=false -detailed-exitcode -no-color -out=tfplan > plan.log 2>&1
+          code=$?
+          set -e
+          cat plan.log
+          echo "exitcode=$code" >> "$GITHUB_OUTPUT"
+          if [ "$code" -eq 1 ]; then exit 1; fi
+          terraform show -no-color tfplan > plan.txt
+
+      - name: Plan summary
+        if: always() && steps.plan.outputs.exitcode != ''
+        run: |
+          {
+            echo "### Terraform plan"
+            case "${{ steps.plan.outputs.exitcode }}" in
+              0) echo "No changes." ;;
+              2) grep -E '^Plan:|^Changes to Outputs' plan.log || true ;;
+              *) echo "Plan failed - see the log." ;;
+            esac
+            if [ -f plan.txt ]; then
+              echo; echo "<details><summary>Full plan</summary>"; echo
+              echo '```'; head -c 60000 plan.txt; echo '```'
+              echo "</details>"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Comment plan on the pull request
+        if: github.event_name == 'pull_request' && steps.plan.outputs.exitcode != ''
+        uses: actions/github-script@v9
+        env:
+          EXITCODE: ${{ steps.plan.outputs.exitcode }}
+        with:
+          script: |
+            const fs = require('fs');
+            const dir = 'infra/terraform';
+            const marker = '<!-- terraform-plan -->';
+            const code = process.env.EXITCODE;
+            const log = fs.readFileSync(`${dir}/plan.log`, 'utf8');
+            const full = fs.existsSync(`${dir}/plan.txt`) ? fs.readFileSync(`${dir}/plan.txt`, 'utf8') : log;
+            const headline = code === '0' ? 'No changes.'
+              : code === '2' ? ((log.match(/^Plan:.*$/m) || ['Changes detected.'])[0])
+              : 'Plan failed.';
+            const max = 60000;
+            const text = full.length > max ? full.slice(0, max) + '\n... (truncated, see the run summary)' : full;
+            const body = `${marker}\n### Terraform plan: ${headline}\n` +
+              `Commit \`${context.sha.slice(0, 7)}\` · [run](${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId})\n\n` +
+              `<details><summary>Show plan</summary>\n\n\`\`\`\n${text}\n\`\`\`\n</details>\n\n` +
+              `Applied automatically after merge to main, once approved in the \`infra\` environment.`;
+            const { data: comments } = await github.rest.issues.listComments({
+              ...context.repo, issue_number: context.issue.number, per_page: 100,
+            });
+            const mine = comments.find(c => c.body && c.body.startsWith(marker));
+            if (mine) {
+              await github.rest.issues.updateComment({ ...context.repo, comment_id: mine.id, body });
+            } else {
+              await github.rest.issues.createComment({ ...context.repo, issue_number: context.issue.number, body });
+            }
+
+      # Hand the exact plan (and the provider lock file it was made with) to apply.
+      - name: Upload plan
+        if: github.ref == 'refs/heads/main' && steps.plan.outputs.exitcode == '2'
+        uses: actions/upload-artifact@v7
+        with:
+          name: tfplan
+          path: |
+            infra/terraform/tfplan
+            infra/terraform/.terraform.lock.hcl
+          include-hidden-files: true
+          retention-days: 1
+
+  apply:
+    name: terraform apply
+    needs: plan
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && needs.plan.outputs.exitcode == '2'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: infra       # required reviewer approves here, after reading the plan
+    permissions:
+      contents: read
+      id-token: write
+    defaults:
+      run:
+        working-directory: infra/terraform
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Download plan
+        uses: actions/download-artifact@v8
+        with:
+          name: tfplan
+          path: infra/terraform
+
+      - name: Authenticate to Google Cloud (tf-apply)
+        uses: google-github-actions/auth@v3
+        with:
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER_TF_APPLY }}
+          service_account: ${{ vars.GCP_TF_APPLY_SA }}
+
+      - uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          terraform_wrapper: false
+
+      - name: terraform init
+        run: terraform init -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}"
+
+      # Applies the reviewed plan only. If the state changed since the plan was
+      # made, Terraform refuses ("saved plan is stale") and nothing is changed.
+      - name: terraform apply
+        run: terraform apply -no-color tfplan
+
+      - name: Outputs
+        run: |
+          {
+            echo "### Terraform applied"
+            echo '```'
+            terraform output -no-color
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

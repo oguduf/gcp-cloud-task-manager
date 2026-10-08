@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # Runs ON THE VM (as root, via the GitHub Actions IAP SSH step).
-# Usage: sudo bash deploy.sh <full-image-ref> [secret-id]
+# Usage: sudo bash deploy.sh <full-image-ref>
 set -euo pipefail
 
-IMAGE="${1:?usage: deploy.sh <image> [secret-id]}"
-SECRET_ID="${2:-mongo-root-password}"
+IMAGE="${1:?usage: deploy.sh <image>}"
 APP_DIR=/opt/profile-app
 REGISTRY_HOST="${IMAGE%%/*}"            # e.g. us-east1-docker.pkg.dev
+MD=http://metadata.google.internal/computeMetadata/v1
 
 # Docker is installed by the VM startup script; wait for it on a fresh VM.
 for _ in $(seq 1 60); do docker compose version >/dev/null 2>&1 && break; sleep 5; done
@@ -19,31 +19,34 @@ cd "$APP_DIR"
 # The VM's own service account pulls the image (roles/artifactregistry.reader).
 gcloud auth configure-docker "$REGISTRY_HOST" --quiet >/dev/null 2>&1
 
-# Mongo password comes from Secret Manager - never from GitHub.
-MONGO_PWD="$(gcloud secrets versions access latest --secret="$SECRET_ID")"
+# Firestore connection string, set by Terraform (infra/terraform/compute.tf) as instance metadata.
+# It contains no credentials: the app authenticates with the VM's service account.
+MONGO_URL="$(curl -fsS -H 'Metadata-Flavor: Google' "$MD/instance/attributes/mongo-url")"
 
 umask 077
 cat > .env <<ENV
 APP_IMAGE=${IMAGE}
-MONGO_DB_USERNAME=admin
-MONGO_DB_PWD=${MONGO_PWD}
+MONGO_URL=${MONGO_URL}
 ENV
 
 docker compose pull --quiet
 docker compose up -d --remove-orphans
 docker image prune -f >/dev/null
 
-# Wait for the app to answer locally before reporting success.
+# Wait for the app, then make sure it can actually reach Firestore.
 for _ in $(seq 1 30); do
   if curl -fsS http://localhost/healthz >/dev/null 2>&1; then
-    echo "Deployed ${IMAGE}"
-    docker compose ps
-    rm -rf /tmp/profile-app
-    exit 0
+    if curl -fsS http://localhost/get-profile >/dev/null; then
+      echo "Deployed ${IMAGE} (Firestore reachable)"
+      docker compose ps
+      rm -rf /tmp/profile-app
+      exit 0
+    fi
+    break
   fi
   sleep 2
 done
 
-echo "App did not become healthy" >&2
+echo "App is not healthy or cannot reach Firestore" >&2
 docker compose logs --tail=100 my-app >&2
 exit 1

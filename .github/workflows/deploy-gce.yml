@@ -66,8 +66,9 @@ jobs:
           gcloud compute scp deploy/docker-compose.yml deploy/deploy.sh \
             "$VM:/tmp/profile-app/" "${SSH_FLAGS[@]}"
 
-      # 4) On the VM: pull the new image (VM's own SA), read the Mongo password
-      #    from Secret Manager, docker compose up, wait for /healthz.
+      # 4) On the VM: read the Firestore connection string from instance metadata,
+      #    pull the new image (VM's own SA), docker compose up, check /healthz
+      #    and a real Firestore read (/get-profile).
       - name: Deploy on the VM
         run: |
           gcloud compute ssh "$VM" --zone "$ZONE" --tunnel-through-iap --quiet \
@@ -80,6 +81,9 @@ jobs:
           IP="$(gcloud compute instances describe "$VM" --zone "$ZONE" \
                 --format='get(networkInterfaces[0].accessConfigs[0].natIP)')"
           curl -fsS --retry 10 --retry-delay 3 --retry-all-errors "http://${IP}/healthz"
-          echo "### Deployed :rocket:" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Image: \`${IMAGE}:${GITHUB_SHA}\`" >> "$GITHUB_STEP_SUMMARY"
-          echo "- URL: http://${IP}" >> "$GITHUB_STEP_SUMMARY"
+          curl -fsS "http://${IP}/get-profile"   # end-to-end: app -> Firestore
+          {
+            echo "### Deployed :rocket:"
+            echo "- Image: \`${IMAGE}:${GITHUB_SHA}\`"
+            echo "- URL: http://${IP}"
+          } >> "$GITHUB_STEP_SUMMARY"

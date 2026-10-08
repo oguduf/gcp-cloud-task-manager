@@ -1,0 +1,41 @@
+name: OIDC check
+
+# Manual test of the GitHub -> GCP OIDC connection. Changes nothing.
+# Actions tab -> "OIDC check" -> Run workflow (from main).
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write   # without this GitHub will not issue an OIDC token
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Show the token claims GCP will see
+        run: |
+          echo "repository = ${{ github.repository }}"
+          echo "ref        = ${{ github.ref }}"
+          echo "event_name = ${{ github.event_name }}"
+
+      - name: Exchange the GitHub token for GCP credentials (read-only tf-plan)
+        uses: google-github-actions/auth@v3
+        with:
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER_TF_PLAN }}
+          service_account: ${{ vars.GCP_TF_PLAN_SA }}
+
+      - uses: google-github-actions/setup-gcloud@v3
+
+      - name: Prove it works
+        run: |
+          echo "Authenticated as:"
+          gcloud auth list --filter=status:ACTIVE --format='value(account)'
+          echo
+          echo "Project visible to this identity:"
+          gcloud projects describe "${{ vars.GCP_PROJECT_ID }}" --format='table(projectId,projectNumber,lifecycleState)'
+          echo
+          echo "OIDC connection OK" >> "$GITHUB_STEP_SUMMARY"
