@@ -1,0 +1,50 @@
+# Runs on the VM at /opt/profile-app. Values come from /opt/profile-app/.env,
+# which deploy.sh writes on every deploy (image tag + password from Secret Manager).
+name: profile-app
+
+services:
+  my-app:
+    image: ${APP_IMAGE:?APP_IMAGE not set}
+    restart: unless-stopped
+    ports:
+      - "80:3000"                       # public - the only port open in the firewall
+    environment:
+      MONGO_DB_USERNAME: ${MONGO_DB_USERNAME}
+      MONGO_DB_PWD: ${MONGO_DB_PWD}
+      MONGO_DB_HOST: mongodb
+    depends_on:
+      mongodb:
+        condition: service_healthy
+
+  mongodb:
+    image: mongo:7.0
+    restart: unless-stopped
+    # no "ports:" - Mongo is only reachable on the internal compose network
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_DB_USERNAME}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_DB_PWD}
+    volumes:
+      - mongo-data:/data/db             # data survives redeploys
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  mongo-express:
+    image: mongo-express:1.0.2
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8081:8081"           # localhost only - reach it through an IAP SSH tunnel
+    environment:
+      ME_CONFIG_MONGODB_ADMINUSERNAME: ${MONGO_DB_USERNAME}
+      ME_CONFIG_MONGODB_ADMINPASSWORD: ${MONGO_DB_PWD}
+      ME_CONFIG_MONGODB_SERVER: mongodb
+      ME_CONFIG_BASICAUTH_USERNAME: ${MONGO_DB_USERNAME}
+      ME_CONFIG_BASICAUTH_PASSWORD: ${MONGO_DB_PWD}
+    depends_on:
+      mongodb:
+        condition: service_healthy
+
+volumes:
+  mongo-data:
