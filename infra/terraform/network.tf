@@ -35,14 +35,15 @@ resource "google_compute_firewall" "allow_iap_ssh" {
   }
 }
 
-# The app (Docker publishes host :80 -> container :3000).
+# Only Google's global external Application Load Balancer proxies and health
+# checks may reach the VM on port 80. The VM has no external IP.
 resource "google_compute_firewall" "allow_http" {
   name      = "${var.name}-allow-http"
   network   = google_compute_network.vpc.id
   direction = "INGRESS"
   priority  = 1000
 
-  source_ranges           = ["0.0.0.0/0"]
+  source_ranges           = ["35.191.0.0/16", "130.211.0.0/22"]
   target_service_accounts = [google_service_account.vm.email]
 
   allow {
@@ -51,12 +52,28 @@ resource "google_compute_firewall" "allow_http" {
   }
 }
 
-# Survives VM stop / recreate, so the app URL never changes.
-resource "google_compute_address" "vm" {
-  name         = "${var.name}-vm-ip"
-  region       = var.region
-  address_type = "EXTERNAL"
-  network_tier = "PREMIUM"
+# A VM without an external IP still needs outbound access for OS updates and
+# Docker downloads. Private Google Access on the subnet handles Firestore.
+resource "google_compute_router" "private" {
+  name    = "${var.name}-router"
+  region  = var.region
+  network = google_compute_network.vpc.id
+}
 
-  depends_on = [google_project_service.apis]
+resource "google_compute_router_nat" "private" {
+  name                               = "${var.name}-nat"
+  router                             = google_compute_router.private.name
+  region                             = var.region
+  nat_ip_allocate_option             = "AUTO_ONLY"
+  source_subnetwork_ip_ranges_to_nat = "LIST_OF_SUBNETWORKS"
+
+  subnetwork {
+    name                    = google_compute_subnetwork.subnet.id
+    source_ip_ranges_to_nat = ["PRIMARY_IP_RANGE"]
+  }
+
+  log_config {
+    enable = true
+    filter = "ERRORS_ONLY"
+  }
 }

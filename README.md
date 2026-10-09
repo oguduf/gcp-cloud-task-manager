@@ -18,20 +18,22 @@ flowchart LR
     wif[Workload Identity Federation<br/>repo == yours && ref == main]
     sa[gh-deployer SA]
     ar[(Artifact Registry)]
+    lb[External Application Load Balancer<br/>public HTTP IP]
+    nat[Cloud NAT<br/>outbound only]
     iap[Identity-Aware Proxy<br/>:22 only]
     fs[(Firestore<br/>MongoDB compat<br/>db: user-account)]
     subgraph VM[Compute Engine VM - SA profile-app-vm]
       app[my-app :80] -- ID token aud=FIRESTORE --> md[metadata server]
     end
   end
-  users((Users)) -- HTTP :80 --> app
+  users((Users)) -- HTTP :80 --> lb --> VM
   runner -- "1 OIDC JWT" --> wif
   wif -- "2 impersonate" --> sa
   sa -- "3 short-lived token" --> runner
   runner -- "4 docker push" --> ar
   runner -- "5 ssh/scp via IAP" --> iap
   iap -- "6 sudo deploy.sh" --> VM
-  VM -- "7 pull image" --> ar
+  VM -- "7 pull image via NAT" --> nat --> ar
   app -- "8 MONGODB-OIDC, TLS 443" --> fs
 ```
 
@@ -42,7 +44,7 @@ flowchart LR
 | `.github/workflows/deploy-gce.yml` | App: build → push to Artifact Registry → deploy over IAP SSH → smoke test |
 | `.github/workflows/terraform.yml` | Infra: plan on PRs (posted as a comment) → approve → apply on `main` |
 | `infra/bootstrap/` | Run once by hand: state bucket, GitHub OIDC trust, `tf-plan` / `tf-apply` service accounts |
-| `infra/terraform/` | App infrastructure, applied by the pipeline: APIs, VPC/subnet/firewall, static IP, Firestore, Artifact Registry, deployer + VM service accounts and IAM, VM |
+| `infra/terraform/` | App infrastructure: private VM/subnet, external HTTP load balancer, Cloud NAT, Firestore, Artifact Registry, IAM |
 | `infra/vm-startup.sh` | VM startup script that installs Docker + compose plugin |
 | `deploy/docker-compose.yml` | What runs on the VM (`/opt/profile-app`) |
 | `deploy/deploy.sh` | Runs on the VM: writes `.env` (image + Firestore URL from instance metadata), pulls, `compose up`, health + DB check |
@@ -134,19 +136,38 @@ A deleted Workload Identity Pool ID stays reserved for 30 days.
 
 ## Networking
 
-![Networking diagram](docs/networking-diagram.svg)
+GCP's external Application Load Balancer has a public global IP; it is **not
+inside a public subnet**. The existing `profile-app-subnet` is the private VM
+subnet. Firestore is a managed service outside the VPC, reached from the VM
+through Private Google Access. This is still a single-VM deployment, so the
+load balancer does not make the application highly available.
+
+```mermaid
+flowchart LR
+  browser[Browser] -- HTTP :80 --> lb[External Application Load Balancer]
+  lb --> vm[Private Compute Engine VM]
+  vm -- TLS :443 / Private Google Access --> fs[(Firestore)]
+  vm -- outbound only --> nat[Cloud NAT] --> internet[Docker and package downloads]
+  github[GitHub Actions] -- IAP SSH --> vm
+```
 
 | Resource | Name | Settings |
 |---|---|---|
 | VPC | `profile-app-vpc` | custom subnet mode (no default-network open rules) |
-| Subnet | `profile-app-subnet` | `10.10.0.0/24`, `us-east1`, Private Google Access on |
-| Firewall | `profile-app-allow-http` | ingress `tcp:80` from `0.0.0.0/0` → VM service account |
+| Subnet | `profile-app-subnet` | private VM subnet `10.10.0.0/24`, `us-east1`, Private Google Access on |
+| Load balancer | `profile-app-http` | public global HTTP `:80` → single-VM instance group; `/healthz` check |
+| Firewall | `profile-app-allow-http` | ingress `tcp:80` only from Google load-balancer and health-check ranges → VM service account |
 | Firewall | `profile-app-allow-iap-ssh` | ingress `tcp:22` from `35.235.240.0/20` (IAP) → VM service account |
 | Firewall | implied | deny all other ingress, allow all egress |
-| Address | `profile-app-vm-ip` | regional static external IP on nic0; VM internal IP `10.10.0.10` |
+| Address | `profile-app-lb-ip` | global static external IP on the load balancer; VM internal IP `10.10.0.10`, no external IP |
+| Cloud NAT | `profile-app-nat` | outbound internet access for the private VM, not inbound access |
 
 Docker only publishes host `:80 → my-app:3000`. The database is a managed service reached
-outbound on TLS 443, so it needs no inbound firewall rule.
+outbound on TLS 443, so it needs no inbound firewall rule. The external IP and
+HTTP URL change when this migration is applied. Since the load balancer has only
+one backend, it returns an error until the app is running and `/healthz` passes.
+Apply this change only after reviewing the Terraform plan and arranging a
+cutover window; the old VM address is removed.
 
 ## Database: Firestore with MongoDB compatibility
 

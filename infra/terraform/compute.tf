@@ -21,11 +21,6 @@ resource "google_compute_instance" "vm" {
   network_interface {
     subnetwork = google_compute_subnetwork.subnet.id
     network_ip = var.vm_internal_ip
-
-    access_config {
-      nat_ip       = google_compute_address.vm.address
-      network_tier = "PREMIUM"
-    }
   }
 
   service_account {
@@ -51,6 +46,7 @@ resource "google_compute_instance" "vm" {
   }
 
   depends_on = [
+    google_compute_router_nat.private,
     google_project_iam_member.vm_logging,
     google_artifact_registry_repository_iam_member.vm_pull,
   ]

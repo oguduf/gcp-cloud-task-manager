@@ -1,6 +1,6 @@
 output "app_url" {
-  description = "Public URL of the app (after the first deploy)."
-  value       = "http://${google_compute_address.vm.address}"
+  description = "Public load-balancer URL of the app (after the first deploy)."
+  value       = "http://${google_compute_global_address.lb.address}"
 }
 
 output "mongo_url" {
