@@ -28,7 +28,7 @@ variable "machine_type" {
 }
 
 variable "subnet_cidr" {
-  description = "Primary range of the VM subnet."
+  description = "Primary range of the private VM subnet."
   type        = string
   default     = "10.10.0.0/24"
 }

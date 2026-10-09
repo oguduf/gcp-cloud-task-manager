@@ -78,13 +78,13 @@ jobs:
             --strict-host-key-checking=no \
             --command "sudo bash /tmp/profile-app/deploy.sh '${IMAGE}:${GITHUB_SHA}'"
 
-      # 5) Hit the public endpoint from outside.
+      # 5) Hit the public load balancer, not the VM (which has no external IP).
       - name: Smoke test
         run: |
-          IP="$(gcloud compute instances describe "$VM" --zone "$ZONE" \
-                --format='get(networkInterfaces[0].accessConfigs[0].natIP)')"
-          curl -fsS --retry 10 --retry-delay 3 --retry-all-errors "http://${IP}/healthz"
-          curl -fsS "http://${IP}/get-profile"   # end-to-end: app -> Firestore
+          LB_IP_NAME="${VM%-vm}-lb-ip"
+          IP="$(gcloud compute addresses describe "$LB_IP_NAME" --global --format='value(address)')"
+          curl -fsS --retry 20 --retry-delay 3 --retry-all-errors "http://${IP}/healthz"
+          curl -fsS --retry 10 --retry-delay 3 --retry-all-errors "http://${IP}/get-profile"   # end-to-end: LB -> app -> Firestore
           {
             echo "### Deployed :rocket:"
             echo "- Image: \`${IMAGE}:${GITHUB_SHA}\`"
