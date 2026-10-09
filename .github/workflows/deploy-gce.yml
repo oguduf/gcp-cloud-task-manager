@@ -28,6 +28,9 @@ env:
 
 jobs:
   build-and-deploy:
+    # On the first merge, Terraform must create the VM before this job runs.
+    # Run this workflow manually once, then set AUTO_DEPLOY=true for later pushes.
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'workflow_dispatch' || vars.AUTO_DEPLOY == 'true')
     runs-on: ubuntu-latest
     timeout-minutes: 20
 

@@ -42,7 +42,6 @@ for _ in $(seq 1 30); do
       rm -rf /tmp/profile-app
       exit 0
     fi
-    break
   fi
   sleep 2
 done

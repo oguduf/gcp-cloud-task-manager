@@ -71,23 +71,45 @@ only its own purpose, so a pull-request token can never be used to apply or depl
 ## Setup (once)
 
 1. **Push this folder to a GitHub repo.**
-2. **Bootstrap** (Cloud Shell or your machine, as a project Owner, about 2 minutes):
+2. **Bootstrap** (Cloud Shell or your machine, with permission to create the
+   resources and IAM grants in `infra/bootstrap`):
    ```bash
    cd infra/bootstrap
    cp terraform.tfvars.example terraform.tfvars   # set project_id and github_repo
-   terraform init && terraform apply
+   # On a local machine only: gcloud auth application-default login
+   terraform init
+   terraform plan
+   terraform apply                                  # only after reviewing the plan
    ```
-3. **Configure GitHub** with the GitHub CLI logged in:
+   On Windows PowerShell, use `Copy-Item .\terraform.tfvars.example .\terraform.tfvars`
+   instead of `cp`. `terraform.tfvars` is ignored by Git. `terraform init`
+   installs providers; **only `terraform apply` creates the Workload Identity
+   Pool/providers, service accounts, state bucket, and IAM bindings**. Keep the
+   bootstrap state safe so future changes do not attempt to recreate them.
+3. **Configure GitHub**: run `terraform output github_variables` in
+   `infra/bootstrap` and add each entry under repository **Settings → Secrets
+   and variables → Actions → Variables**. The output contains the actual
+   project number and resource names; do not use placeholder values. If you
+   use the GitHub CLI and want the additional branch/environment policy changes,
+   review this generated script before running it:
    ```bash
-   terraform output -raw gh_setup_commands | bash
+   terraform output -raw gh_setup_commands
    ```
-   This sets all repository variables (none are secrets), protects `main` so changes go through
-   pull requests, and creates the `infra` environment with you as the required reviewer.
+   Before merging to `main`, create the `infra` GitHub environment with a
+   required reviewer. The Terraform apply job must not run without this gate.
+   The optional script sets repository variables (none are secrets), protects
+   `main` so changes go through pull requests, and configures that environment.
+   Cloud Build's GitHub repository connection is
+   separate and does not create this GitHub Actions OIDC trust.
    Required reviewers and branch protection on a **private** repo need a paid GitHub plan
    (Pro/Team); they are free on public repos.
-4. **First infrastructure apply:** run the **Terraform** workflow (Actions tab → Run workflow),
-   read the plan in the run summary, then approve the `apply` job.
-5. **First app deploy:** run the **Build & deploy to GCE** workflow. Later pushes deploy by themselves.
+4. **Merge `dev` into `main`.** GitHub only offers these manual workflows after
+   their files exist on the default branch. The Terraform workflow runs on the
+   merge; read its plan in the run summary, then approve the `apply` job.
+5. **First app deploy:** after Terraform succeeds, manually run **Build & deploy
+   to GCE** from `main`. The automatic deploy job stays skipped until you set
+   the repository Actions variable `AUTO_DEPLOY` to `true`. Set it only after
+   the first manual deployment succeeds; later pushes to `main` then deploy.
 
 Optional but recommended: commit `infra/terraform/.terraform.lock.hcl` (create it with
 `terraform init -backend=false` in that folder) so CI always uses the same provider versions.
@@ -135,7 +157,9 @@ outbound on TLS 443, so it needs no inbound firewall rule.
 - The connection string holds no secret. It is stored as the VM metadata key `mongo-url`, and
   `deploy.sh` copies it into `.env`.
 - The VM service account has `roles/datastore.user`, limited by an IAM condition to this one database.
-- Local development is unchanged: `docker compose up` (root `docker-compose.yaml`), then `node app/server.js`.
+- For local development, start Docker Desktop, run `docker compose up -d` from
+  the repository root, then run `npm ci` and `npm start` from `app/` (requires a
+  Node.js installation that includes npm). Open `http://localhost:3000`.
   Without `MONGO_URL` set, the app falls back to `mongodb://admin:password@localhost:27017`.
 
 ## Operating
