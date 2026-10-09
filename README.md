@@ -86,6 +86,8 @@ only its own purpose, so a pull-request token can never be used to apply or depl
    installs providers; **only `terraform apply` creates the Workload Identity
    Pool/providers, service accounts, state bucket, and IAM bindings**. Keep the
    bootstrap state safe so future changes do not attempt to recreate them.
+   The bootstrap uses its own `github-task-manager` Workload Identity Pool.
+   Do not point this repo at an existing pool owned by another repository.
 3. **Configure GitHub**: run `terraform output github_variables` in
    `infra/bootstrap` and add each entry under repository **Settings → Secrets
    and variables → Actions → Variables**. The output contains the actual

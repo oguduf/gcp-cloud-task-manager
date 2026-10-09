@@ -8,3 +8,4 @@ github_repo = "oguduf/gcp-cloud-task-manager"
 # main_branch       = "main"
 # apply_environment = "infra"
 # state_bucket      = ""   # default: <project_id>-tfstate
+# wif_pool_id       = "github-task-manager" # keep separate from other repos' pools

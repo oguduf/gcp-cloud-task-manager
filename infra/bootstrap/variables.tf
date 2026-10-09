@@ -50,7 +50,7 @@ variable "state_bucket" {
 }
 
 variable "wif_pool_id" {
-  description = "Workload Identity Pool ID. Deleted pool IDs stay reserved for 30 days."
+  description = "Dedicated Workload Identity Pool ID for this repository. Deleted pool IDs stay reserved for 30 days."
   type        = string
-  default     = "github"
+  default     = "github-task-manager"
 }
