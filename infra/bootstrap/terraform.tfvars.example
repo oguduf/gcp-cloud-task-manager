@@ -1,0 +1,11 @@
+# Copy to terraform.tfvars and fill in.
+project_id  = "static-website-510913"
+github_repo = "oguduf/gcp-cloud-task-manager"
+
+# Optional overrides (defaults shown)
+# region            = "us-east1"
+# zone              = "us-east1-b"
+# main_branch       = "main"
+# apply_environment = "infra"
+# state_bucket      = ""   # default: <project_id>-tfstate
+# wif_pool_id       = "github-task-manager" # keep separate from other repos' pools

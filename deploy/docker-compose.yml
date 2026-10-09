@@ -1,0 +1,19 @@
+# Runs on the VM at /opt/profile-app. Values come from /opt/profile-app/.env,
+# which deploy.sh writes on every deploy (image tag + Firestore connection string).
+# The database is Firestore with MongoDB compatibility - nothing stateful runs here.
+name: profile-app
+
+services:
+  my-app:
+    image: ${APP_IMAGE:?APP_IMAGE not set}
+    restart: unless-stopped
+    ports:
+      - "80:3000"                       # public - the only port open in the firewall
+    environment:
+      MONGO_URL: ${MONGO_URL:?MONGO_URL not set}
+      MONGO_DB_NAME: user-account
+    # The MongoDB driver (MONGODB-OIDC, ENVIRONMENT:gcp) asks http://metadata/...
+    # for an ID token for the VM's service account. Pin the name to the
+    # link-local metadata server so it resolves inside the container.
+    extra_hosts:
+      - "metadata:169.254.169.254"

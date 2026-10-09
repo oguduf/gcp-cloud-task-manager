@@ -1,0 +1,121 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 664" width="1100" height="664" role="img" aria-label="Network path: users reach the VM's static external IP on tcp 80, allowed by the allow-http firewall rule and DNATed by Docker to the app on 3000. The GitHub runner reaches SSH only through Identity-Aware Proxy from 35.235.240.0/20. All other inbound traffic is dropped by the implied deny rule. The VM connects out to Firestore on TLS 443 and to Artifact Registry via the default internet gateway; token requests to the link-local metadata server never leave the host." xmlns:c2pa="http://c2pa.org/manifest"><metadata><c2pa:manifest>AAAWgmp1bWIAAAAeanVtZGMycGEAEQAQgAAAqgA4m3EDYzJwYQAAABZcanVtYgAAAEdqdW1kYzJtYQARABCAAACqADibcQN1cm46YzJwYToyYmUyZGMxOC0yYTYwLTRiNGEtOTA0Mi01Mjc2ZjVmOTQ3NzkAAAADl2p1bWIAAAApanVtZGMyYXMAEQAQgAAAqgA4m3EDYzJwYS5hc3NlcnRpb25zAAAAALxqdW1iAAAARGp1bWRjYm9yABEAEIAAAKoAOJtxE2MycGEuaW5ncmVkaWVudC52MwAAAAAYYzJzaGeyozwnkt/NllN52DUZ928AAABwY2JvcqNpZGM6Zm9ybWF0bWltYWdlL3N2Zyt4bWxqaW5zdGFuY2VJRHgseG1wOmlpZDpkMTFiMjBlNi04Nzk3LTRlN2ItYTcyOC0wOTNmYzNhNTBjYTNscmVsYXRpb25zaGlwaHBhcmVudE9mAAAB4mp1bWIAAABBanVtZGNib3IAEQAQgAAAqgA4m3ETYzJwYS5hY3Rpb25zLnYyAAAAABhjMnNo/uAYWxCvJY+HlECyVuagBwAAAZljYm9yomdhY3Rpb25zgqJmYWN0aW9ua2MycGEub3BlbmVkanBhcmFtZXRlcnOha2luZ3JlZGllbnRzgaJjdXJseC1zZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmluZ3JlZGllbnQudjNkaGFzaFggR2BtabP2EiYwc3/Tip3cOyJ1tgHhTtCC4DU38FQeegSkZmFjdGlvbngdY29tLmFudGhyb3BpYy5jbGF1ZGUucHJvdmlkZWRqcGFyYW1ldGVyc6F4H2NvbS5hbnRocm9waWMub3JpZ2luLWNvbmZpZGVuY2VndW5rbm93bmtkZXNjcmlwdGlvbnhmQ2xhdWRlIHByb3ZpZGVkIHRoaXMgZmlsZSBhdCB0aGUgcmVxdWVzdCBvZiBhIHVzZXIgYW5kIG1heSBoYXZlIGNyZWF0ZWQgb3IgbW9kaWZpZWQgdGhlIGZpbGUgY29udGVudHMubXNvZnR3YXJlQWdlbnShZG5hbWVmQ2xhdWRlcmFsbEFjdGlvbnNJbmNsdWRlZPUAAADIanVtYgAAAEBqdW1kY2JvcgARABCAAACqADibcRNjMnBhLmhhc2guZGF0YQAAAAAYYzJzaOtKAtmDkL0YKz2hFqYNSiEAAACAY2JvcqVjYWxnZnNoYTI1NmNwYWRMAAAAAAAAAAAAAAAAZGhhc2hYIAxc53k7qK5dC8UIFPHsFHe0G31B0vZr40TOyTH7HVpSZG5hbWVuanVtYmYgbWFuaWZlc3RqZXhjbHVzaW9uc4GiZXN0YXJ0GQKsZmxlbmd0aBkeBAAAAj5qdW1iAAAAJ2p1bWRjMmNsABEAEIAAAKoAOJtxA2MycGEuY2xhaW0udjIAAAACD2Nib3KlY2FsZ2ZzaGEyNTZpc2lnbmF0dXJleE1zZWxmI2p1bWJmPS9jMnBhL3VybjpjMnBhOjJiZTJkYzE4LTJhNjAtNGI0YS05MDQyLTUyNzZmNWY5NDc3OS9jMnBhLnNpZ25hdHVyZWppbnN0YW5jZUlEeCx4bXA6aWlkOmUwY2FmNTViLTdmNmYtNDdjOS1iNTA0LWIxMmI5M2U2ZGFjNXJjcmVhdGVkX2Fzc2VydGlvbnODomN1cmx4LXNlbGYjanVtYmY9YzJwYS5hc3NlcnRpb25zL2MycGEuaW5ncmVkaWVudC52M2RoYXNoWCBHYG1ps/YSJjBzf9OKndw7InW2AeFO0ILgNTfwVB56BKJjdXJseCpzZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmFjdGlvbnMudjJkaGFzaFggwXulwSwinaFVBqFPbBKZOVDLVf/Js0ucxSQKTEsMO2eiY3VybHgpc2VsZiNqdW1iZj1jMnBhLmFzc2VydGlvbnMvYzJwYS5oYXNoLmRhdGFkaGFzaFggRXetBAdrqZtDtwTU2SPSb0i/fQ5yuEbIDXeEY/0txPx0Y2xhaW1fZ2VuZXJhdG9yX2luZm+jZG5hbWVvQW50aHJvcGljIEZpbGVzZ3ZlcnNpb25lMS4wLjBrc3BlY1ZlcnNpb25lMi40LjAAABA4anVtYgAAAChqdW1kYzJjcwARABCAAACqADibcQNjMnBhLnNpZ25hdHVyZQAAABAIY2JvctKEWQISogEmGCFZAgowggIGMIIBjaADAgECAhRA5aAK7sI50L64g/oGQgU9Z1UTADAKBggqhkjOPQQDAzBJMRcwFQYDVQQKEw5BbnRocm9waWMsIFBCQzEuMCwGA1UEAxMlQW50aHJvcGljIENvbnRlbnQgQ3JlZGVudGlhbHMgUm9vdCBDQTAeFw0yNjA4MDcxODQzNTZaFw0yODA4MDYxOTQzNTZaMEQxFzAVBgNVBAoTDkFudGhyb3BpYywgUEJDMSkwJwYDVQQDEyBBbnRocm9waWMgQ2xhdWRlIENvbnRlbnQgU2lnbmluZzBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABJh6CmvLUBgFFNU0vUKlOVtE6djd17L5SuwX0LemFisBM3dkd/3cyjxFA3Qo5S46fX0/ihY0VZ7mfb9KF703t5OjWDBWMA4GA1UdDwEB/wQEAwIHgDAVBgNVHSUEDjAMBgorBgEEAYPoXgIBMAwGA1UdEwEB/wQCMAAwHwYDVR0jBBgwFoAUzlHiBIFOZFsj+OPEz5o+nMHXXMIwCgYIKoZIzj0EAwMDZwAwZAIwMXMdFJ4BetLLVY7ORuE9noqbbAZOZn/aArXyTwFAZfKrPzxF2vPoJNf1+UCdg1XGAjBwX1zd9WGqYkqmL5SFqw1QySjr1zJfpJM9+1rdDwSPLMOPOjKuiXjoU/pUUeG9RwmhY3BhZFkNngAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAPZYQJd8+JIcwktS+RlcX1Rl8f93P2fHADJC5Qm0YVS59JsNVI1/l+ZlYzTNDaUCFj/MH5KL4JyjnsCmRoDepjPi7eI=</c2pa:manifest></metadata>
+<style>
+svg{background:#ffffff;font-family:"IBM Plex Sans","Segoe UI",Helvetica,Arial,sans-serif}
+.z{fill:#e8edf2;stroke:#c9d1d9}
+.box{fill:#ffffff;stroke:#c9d1d9;stroke-width:1.2}
+.box.id{stroke:#0a6f6a;stroke-width:1.6;fill:#dcefed}
+.box.deny{stroke:#b42318;stroke-width:1.4;fill:#fbeae8}
+.region{fill:none;stroke:#c9d1d9;stroke-dasharray:5 4}
+.t{fill:#17202a;font-size:13px;font-weight:600}
+.zt{fill:#5b6875;font-family:"IBM Plex Mono",Consolas,Menlo,monospace;font-size:12px;letter-spacing:.06em;text-transform:uppercase}
+.s{fill:#5b6875;font-family:"IBM Plex Mono",Consolas,Menlo,monospace;font-size:11px}
+.s.id{fill:#0a6f6a}.s.deny{fill:#b42318}
+.edge{stroke:#17202a;stroke-width:1.4;fill:none}
+.edge.id{stroke:#0a6f6a;stroke-width:1.8}
+.edge.deny{stroke:#b42318}.edge.dash{stroke-dasharray:5 4}
+.lbl{fill:#17202a;font-size:12px;font-weight:500;paint-order:stroke;stroke:#e8edf2;stroke-width:5px;stroke-linejoin:round}
+.lbl.id{fill:#0a6f6a}.lbl.deny{fill:#b42318}.lbl.out{stroke:#ffffff}.lbl.bg{stroke:#ffffff}
+.head{fill:#17202a}.head.id{fill:#0a6f6a}.head.deny{fill:#b42318}
+</style>
+<rect x="0" y="0" width="1100" height="664" fill="#ffffff"/>
+      <defs>
+        <marker id="nah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="head"/></marker>
+        <marker id="nahok" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="head id"/></marker>
+        <marker id="nahdeny" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="head deny"/></marker>
+      </defs>
+
+      <!-- outside -->
+      <text class="zt" x="16" y="46">Internet</text>
+      <rect class="box" x="16" y="160" width="180" height="50" rx="6"/>
+      <text class="t" x="106" y="181" text-anchor="middle">Users</text>
+      <text class="s" x="106" y="199" text-anchor="middle">any source IP</text>
+      <rect class="box" x="16" y="285" width="180" height="50" rx="6"/>
+      <text class="t" x="106" y="306" text-anchor="middle">GitHub runner</text>
+      <text class="s" x="106" y="324" text-anchor="middle">gcloud ssh via IAP</text>
+      <rect class="box deny" x="16" y="445" width="180" height="50" rx="6"/>
+      <text class="t" x="106" y="466" text-anchor="middle">Anything else</text>
+      <text class="s" x="106" y="484" text-anchor="middle">:22, :3000, any other port</text>
+
+      <text class="zt" x="236" y="46">Google edge</text>
+      <rect class="box" x="236" y="160" width="170" height="50" rx="6"/>
+      <text class="t" x="321" y="181" text-anchor="middle">Static external IP</text>
+      <text class="s" x="321" y="199" text-anchor="middle">1:1 NAT → nic0</text>
+      <rect class="box" x="236" y="285" width="170" height="50" rx="6"/>
+      <text class="t" x="321" y="306" text-anchor="middle">Identity-Aware Proxy</text>
+      <text class="s" x="321" y="324" text-anchor="middle">src 35.235.240.0/20</text>
+
+      <!-- VPC -->
+      <rect class="z" x="426" y="24" width="658" height="580" rx="10"/>
+      <text class="zt" x="446" y="46">VPC profile-app-vpc · custom mode</text>
+
+      <!-- firewall band -->
+      <rect class="region" x="446" y="64" width="210" height="456" rx="6"/>
+      <text class="s" x="551" y="84" text-anchor="middle">VPC firewall · ingress</text>
+      <rect class="box id" x="462" y="160" width="178" height="50" rx="5"/>
+      <text class="t" x="551" y="181" text-anchor="middle">profile-app-allow-http</text>
+      <text class="s id" x="551" y="199" text-anchor="middle">tcp:80 ← 0.0.0.0/0</text>
+      <rect class="box id" x="462" y="285" width="178" height="50" rx="5"/>
+      <text class="t" x="551" y="306" text-anchor="middle">profile-app-allow-iap-ssh</text>
+      <text class="s id" x="551" y="324" text-anchor="middle">tcp:22 ← 35.235.240.0/20</text>
+      <rect class="box deny" x="462" y="445" width="178" height="50" rx="5"/>
+      <text class="t" x="551" y="466" text-anchor="middle">implied deny</text>
+      <text class="s deny" x="551" y="484" text-anchor="middle">all other ingress</text>
+      <text class="s" x="551" y="510" text-anchor="middle">target: VM service account</text>
+
+      <!-- subnet -->
+      <rect class="box" x="676" y="56" width="392" height="384" rx="8"/>
+      <text class="zt" x="692" y="76">Subnet profile-app-subnet</text>
+      <text class="s" x="692" y="92">10.10.0.0/24 · us-east1 · Private Google Access on</text>
+
+      <!-- VM -->
+      <rect class="box" x="692" y="102" width="360" height="322" rx="6"/>
+      <text class="t" x="708" y="124">profile-app-vm</text>
+      <text class="s" x="708" y="142">nic0 10.10.0.10 · ext &lt;static IP&gt;</text>
+
+      <rect class="box" x="708" y="285" width="130" height="50" rx="5"/>
+      <text class="t" x="773" y="306" text-anchor="middle">sshd :22</text>
+      <text class="s" x="773" y="324" text-anchor="middle">OS Login</text>
+
+      <rect class="box" x="866" y="160" width="160" height="50" rx="5"/>
+      <text class="t" x="946" y="181" text-anchor="middle">my-app</text>
+      <text class="s" x="946" y="199" text-anchor="middle">host :80 → :3000</text>
+      <rect class="box id" x="866" y="330" width="160" height="50" rx="5"/>
+      <text class="t" x="946" y="351" text-anchor="middle">metadata server</text>
+      <text class="s" x="946" y="369" text-anchor="middle">169.254.169.254</text>
+      <line class="edge id" x1="946" y1="210" x2="946" y2="328" marker-end="url(#nahok)"/>
+      <text class="lbl id out" x="954" y="268">ID token</text>
+      <text class="s" x="946" y="400" text-anchor="middle">link-local, never leaves host</text>
+
+      <!-- egress -->
+      <rect class="box" x="676" y="470" width="392" height="118" rx="8"/>
+      <text class="t" x="692" y="494">Egress · implied allow-all</text>
+      <text class="s" x="692" y="516">default route 0.0.0.0/0 → internet gateway</text>
+      <text class="s id" x="692" y="538">→ Firestore &lt;uid&gt;.us-east1.firestore.goog:443</text>
+      <text class="s" x="692" y="558">→ Artifact Registry · Cloud Logging</text>
+      <text class="s" x="692" y="578">→ deb.debian.org, download.docker.com</text>
+      <line class="edge" x1="772" y1="424" x2="772" y2="468" marker-end="url(#nah)"/>
+
+      <!-- row A: HTTP -->
+      <line class="edge id" x1="196" y1="185" x2="234" y2="185" marker-end="url(#nahok)"/>
+      <line class="edge id" x1="406" y1="185" x2="460" y2="185" marker-end="url(#nahok)"/>
+      <line class="edge id" x1="640" y1="185" x2="864" y2="185" marker-end="url(#nahok)"/>
+      <text class="lbl id out" x="772" y="177" text-anchor="middle">tcp:80 → 10.10.0.10</text>
+
+      <!-- row B: SSH via IAP -->
+      <line class="edge id" x1="196" y1="310" x2="234" y2="310" marker-end="url(#nahok)"/>
+      <text class="lbl id bg" x="216" y="300" text-anchor="middle">443</text>
+      <line class="edge id" x1="406" y1="310" x2="460" y2="310" marker-end="url(#nahok)"/>
+      <line class="edge id" x1="640" y1="310" x2="706" y2="310" marker-end="url(#nahok)"/>
+      <text class="lbl id" x="673" y="300" text-anchor="middle">tcp:22</text>
+
+      <!-- row C: denied -->
+      <line class="edge deny dash" x1="196" y1="470" x2="460" y2="470" marker-end="url(#nahdeny)"/>
+      <text class="lbl deny bg" x="330" y="462" text-anchor="middle">✕ dropped</text>
+    
+      <g transform="translate(16,636)">
+        <line x1="0" y1="0" x2="24" y2="0" class="edge id"/><text class="s" x="32" y="4">allowed ingress</text>
+        <line x1="150" y1="0" x2="174" y2="0" class="edge deny dash"/><text class="s" x="182" y="4">dropped by implied deny</text>
+        <text class="s" x="1068" y="4" text-anchor="end">profile-app · GCE + Firestore (MongoDB compat) · custom VPC</text>
+      </g>
+    </svg>
