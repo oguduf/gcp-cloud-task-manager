@@ -190,10 +190,9 @@ resource "google_project_iam_custom_role" "deployer_mig" {
     "compute.instanceTemplates.useReadOnly",
     "compute.instances.get",
     "compute.instances.list",
-    "compute.regionInstanceGroupManagers.get",
-    "compute.regionInstanceGroupManagers.list",
-    "compute.regionInstanceGroupManagers.listManagedInstances",
-    "compute.regionInstanceGroupManagers.update",
+    "compute.instanceGroupManagers.get",
+    "compute.instanceGroupManagers.list",
+    "compute.instanceGroupManagers.update",
     "compute.regionOperations.get",
     "compute.regionOperations.list",
   ]
@@ -211,3 +210,4 @@ resource "google_storage_bucket_iam_member" "tf_apply_state" {
   role   = "roles/storage.objectAdmin"
   member = google_service_account.tf_apply.member
 }
+
