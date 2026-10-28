@@ -10,7 +10,7 @@ resource "google_service_account" "deployer" {
 
 resource "google_service_account" "vm" {
   account_id   = "${var.name}-vm"
-  display_name = "Profile app VM runtime"
+  display_name = "Employee dashboard VM runtime"
 
   depends_on = [google_project_service.apis]
 }
@@ -68,5 +68,13 @@ resource "google_service_account_iam_member" "deployer_act_as_vm" {
 resource "google_project_iam_member" "deployer_compute_viewer" {
   project = var.project_id
   role    = "roles/compute.viewer"
+  member  = google_service_account.deployer.member
+}
+
+# The custom role is created by bootstrap; bind it here after the deployer SA
+# exists so bootstrap never grants IAM to a not-yet-created principal.
+resource "google_project_iam_member" "deployer_mig" {
+  project = var.project_id
+  role    = "projects/${var.project_id}/roles/profileAppMigDeployer"
   member  = google_service_account.deployer.member
 }

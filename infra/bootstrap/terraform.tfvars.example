@@ -1,5 +1,5 @@
 # Copy to terraform.tfvars and fill in.
-project_id  = "static-website-510913"
+project_id  = "project-84daccaa-b733-4665-891"
 github_repo = "oguduf/gcp-cloud-task-manager"
 
 # Optional overrides (defaults shown)

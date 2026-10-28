@@ -21,8 +21,10 @@ concurrency:
 env:
   PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
   REGION: ${{ vars.GCP_REGION }}
-  ZONE: ${{ vars.GCP_ZONE }}
-  VM: ${{ vars.GCE_VM_NAME }}
+  MIG: ${{ vars.GCP_MIG_NAME }}
+  BASE_TEMPLATE_PREFIX: ${{ vars.GCP_TEMPLATE_PREFIX }}
+  LB_IP_NAME: ${{ vars.GCP_LB_IP_NAME }}
+  DOMAIN: ${{ vars.GCP_DOMAIN_NAME }}
   BACKEND_IMAGE: ${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/${{ vars.GCP_AR_REPO }}/employee-backend
   FRONTEND_IMAGE: ${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/${{ vars.GCP_AR_REPO }}/employee-frontend
 
@@ -49,11 +51,11 @@ jobs:
 
   build-and-deploy:
     needs: test
-    # On the first merge, Terraform must create the VM before this job runs.
-    # Run this workflow manually once, then set AUTO_DEPLOY=true for later pushes.
+    # Terraform must create the regional MIG and baseline template first.
+    # Run manually for the first image; enable AUTO_DEPLOY after it succeeds.
     if: github.ref == 'refs/heads/main' && (github.event_name == 'workflow_dispatch' || vars.AUTO_DEPLOY == 'true')
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 45
 
     steps:
       - name: Checkout
@@ -71,48 +73,59 @@ jobs:
       - name: Set up gcloud
         uses: google-github-actions/setup-gcloud@v3
 
-      # 2) Build the image and push it to Artifact Registry.
+      # 2) Build immutable frontend and backend images and push to Artifact Registry.
       - name: Configure Docker for Artifact Registry
         run: gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
 
       - name: Build and push images
         run: |
-          docker build -t "${BACKEND_IMAGE}:${GITHUB_SHA}" -t "${BACKEND_IMAGE}:latest" ./backend
-          docker build -t "${FRONTEND_IMAGE}:${GITHUB_SHA}" -t "${FRONTEND_IMAGE}:latest" ./frontend
+          docker build -t "${BACKEND_IMAGE}:${GITHUB_SHA}" ./backend
+          docker build -t "${FRONTEND_IMAGE}:${GITHUB_SHA}" ./frontend
           docker push "${BACKEND_IMAGE}:${GITHUB_SHA}"
-          docker push "${BACKEND_IMAGE}:latest"
           docker push "${FRONTEND_IMAGE}:${GITHUB_SHA}"
-          docker push "${FRONTEND_IMAGE}:latest"
 
-      # 3) Ship compose + deploy script to the VM over IAP (no public SSH port,
-      #    no SSH key stored in GitHub - OS Login issues a short-lived one).
-      - name: Copy deploy files to the VM
+      # 3) Clone the immutable baseline template with the new image references.
+      #    The startup script runs both images on each private MIG instance.
+      - name: Create release template and roll the regional MIG
         run: |
-          SSH_FLAGS=(--zone "$ZONE" --tunnel-through-iap --quiet --strict-host-key-checking=no)
-          gcloud compute ssh "$VM" "${SSH_FLAGS[@]}" --command "mkdir -p /tmp/profile-app"
-          gcloud compute scp deploy/docker-compose.yml deploy/deploy.sh \
-            "$VM:/tmp/profile-app/" "${SSH_FLAGS[@]}"
+          BASE_TEMPLATE="$(gcloud compute instance-templates list \
+            --filter="name~${BASE_TEMPLATE_PREFIX}" \
+            --sort-by='~creationTimestamp' --limit=1 --format='value(name)')"
+          test -n "$BASE_TEMPLATE"
+          TEMPLATE="${BASE_TEMPLATE_PREFIX%-template-}-release-${GITHUB_SHA:0:12}"
+          gcloud compute instance-templates create "$TEMPLATE" \
+            --source-instance-template="$BASE_TEMPLATE" \
+            --metadata="app-backend-image=${BACKEND_IMAGE}:${GITHUB_SHA},app-frontend-image=${FRONTEND_IMAGE}:${GITHUB_SHA}"
+          gcloud compute instance-groups managed rolling-action start-update "$MIG" \
+            --region "$REGION" \
+            --version="template=${TEMPLATE}" \
+            --max-surge=1 \
+            --max-unavailable=0
+          gcloud compute instance-groups managed wait-until "$MIG" \
+            --region "$REGION" --stable --timeout=20m
+          healthy_mig=false
+          for attempt in $(seq 1 40); do
+            INSTANCES="$(gcloud compute instance-groups managed list-instances "$MIG" --region "$REGION" --format=json)"
+            if printf '%s' "$INSTANCES" | python3 -c 'import json,sys; items=json.load(sys.stdin); healthy=sum(1 for item in items if item.get("instanceStatus")=="RUNNING" and item.get("currentAction")=="NONE" and any(h.get("healthState")=="HEALTHY" for h in item.get("instanceHealth",[]))); print(f"Healthy MIG instances: {healthy}/{len(items)}"); sys.exit(0 if healthy >= 2 else 1)'; then
+              healthy_mig=true
+              break
+            fi
+            sleep 30
+          done
+          test "$healthy_mig" = true
 
-      # 4) On the VM: read the Firestore connection string from instance metadata,
-      #    pull the new images (VM's own SA), docker compose up, check /healthz
-      #    and a real Firestore ping (/api/health).
-      - name: Deploy on the VM
-        run: |
-          gcloud compute ssh "$VM" --zone "$ZONE" --tunnel-through-iap --quiet \
-            --strict-host-key-checking=no \
-            --command "sudo bash /tmp/profile-app/deploy.sh '${BACKEND_IMAGE}:${GITHUB_SHA}' '${FRONTEND_IMAGE}:${GITHUB_SHA}'"
-
-      # 5) Hit the public load balancer, not the VM (which has no external IP).
+      # 4) Hit the public load balancer and exercise the database health path.
       - name: Smoke test
         run: |
-          LB_IP_NAME="${VM%-vm}-lb-ip"
           IP="$(gcloud compute addresses describe "$LB_IP_NAME" --global --format='value(address)')"
-          curl -fsS --retry 20 --retry-delay 3 --retry-all-errors "http://${IP}/healthz"
-          curl -fsS --retry 10 --retry-delay 3 --retry-all-errors "http://${IP}/api/health"   # end-to-end: LB -> nginx -> backend -> Firestore
-          curl -fsS --retry 5 --retry-delay 3 --retry-all-errors -o /dev/null "http://${IP}/"   # dashboard page
+          if [ -n "$DOMAIN" ]; then URL="https://${DOMAIN}"; else URL="http://${IP}"; fi
+          curl -fsS --retry 30 --retry-delay 5 --retry-all-errors "${URL}/healthz"
+          curl -fsS --retry 10 --retry-delay 3 --retry-all-errors "${URL}/api/health"
+          curl -fsS --retry 5 --retry-delay 3 --retry-all-errors -o /dev/null "${URL}/"
           {
-            echo "### Deployed :rocket:"
+            echo "### Deployment verified"
             echo "- Backend: \`${BACKEND_IMAGE}:${GITHUB_SHA}\`"
             echo "- Frontend: \`${FRONTEND_IMAGE}:${GITHUB_SHA}\`"
-            echo "- URL: http://${IP}"
+            echo "- URL: ${URL}"
+            echo "- Release template: ${BASE_TEMPLATE_PREFIX%-template-}-release-${GITHUB_SHA:0:12}"
           } >> "$GITHUB_STEP_SUMMARY"

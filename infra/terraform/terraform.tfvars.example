@@ -6,7 +6,17 @@ wif_pool_name = "projects/<project-number>/locations/global/workloadIdentityPool
 # Optional overrides (defaults shown)
 # region                = "us-east1"
 # zone                  = "us-east1-b"
+# zones                 = ["us-east1-b", "us-east1-c", "us-east1-d"]
 # machine_type          = "e2-small"
+# mig_min_replicas      = 2
+# mig_max_replicas      = 4
+# autoscaling_cpu_target = 0.65
+# initial_image_tag     = "bootstrap"
+# domain_name           = ""
+# alert_5xx_threshold   = 5
+# alert_cpu_threshold   = 0.85
+# alert_backend_error_rate = 0.05
+# alert_notification_channels = []
 # subnet_cidr           = "10.10.0.0/24"
 # vm_internal_ip        = "10.10.0.10"
 # firestore_database_id = "user-account"

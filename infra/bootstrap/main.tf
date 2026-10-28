@@ -173,6 +173,32 @@ resource "google_project_iam_member" "tf_apply" {
   member  = google_service_account.tf_apply.member
 }
 
+# GitHub's app deploy identity needs only these release operations. The custom
+# role is owned by bootstrap so the approval-gated Terraform apply identity does
+# not need persistent IAM role-administration permissions.
+resource "google_project_iam_custom_role" "deployer_mig" {
+  role_id     = "profileAppMigDeployer"
+  title       = "Employee Dashboard MIG Deployer"
+  description = "Create release templates and roll the employee dashboard regional MIG."
+  permissions = [
+    "compute.globalAddresses.get",
+    "compute.globalOperations.get",
+    "compute.globalOperations.list",
+    "compute.instanceTemplates.create",
+    "compute.instanceTemplates.get",
+    "compute.instanceTemplates.list",
+    "compute.instanceTemplates.useReadOnly",
+    "compute.instances.get",
+    "compute.instances.list",
+    "compute.regionInstanceGroupManagers.get",
+    "compute.regionInstanceGroupManagers.list",
+    "compute.regionInstanceGroupManagers.listManagedInstances",
+    "compute.regionInstanceGroupManagers.update",
+    "compute.regionOperations.get",
+    "compute.regionOperations.list",
+  ]
+}
+
 # Plan reads state (runs with -lock=false); apply reads, writes and locks it.
 resource "google_storage_bucket_iam_member" "tf_plan_state" {
   bucket = google_storage_bucket.tfstate.name

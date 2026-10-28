@@ -9,12 +9,14 @@ on:
     paths:
       - "infra/terraform/**"
       - "infra/vm-startup.sh"
+      - "infra/mig-startup.sh"
       - ".github/workflows/terraform.yml"
   push:
     branches: [main]
     paths:
       - "infra/terraform/**"
       - "infra/vm-startup.sh"
+      - "infra/mig-startup.sh"
       - ".github/workflows/terraform.yml"
   workflow_dispatch:
 
@@ -34,6 +36,16 @@ env:
   TF_VAR_region: ${{ vars.GCP_REGION }}
   TF_VAR_zone: ${{ vars.GCP_ZONE }}
   TF_VAR_wif_pool_name: ${{ vars.GCP_WIF_POOL }}
+  TF_VAR_domain_name: ${{ vars.GCP_DOMAIN_NAME }}
+  TF_VAR_machine_type: ${{ vars.GCP_MACHINE_TYPE || 'e2-small' }}
+  TF_VAR_zones: ${{ vars.GCP_ZONES || '["us-east1-b","us-east1-c","us-east1-d"]' }}
+  TF_VAR_mig_min_replicas: ${{ vars.GCP_MIG_MIN_REPLICAS || '2' }}
+  TF_VAR_mig_max_replicas: ${{ vars.GCP_MIG_MAX_REPLICAS || '4' }}
+  TF_VAR_autoscaling_cpu_target: ${{ vars.GCP_AUTOSCALING_CPU_TARGET || '0.65' }}
+  TF_VAR_alert_5xx_threshold: ${{ vars.GCP_ALERT_5XX_THRESHOLD || '5' }}
+  TF_VAR_alert_cpu_threshold: ${{ vars.GCP_ALERT_CPU_THRESHOLD || '0.85' }}
+  TF_VAR_alert_backend_error_rate: ${{ vars.GCP_ALERT_BACKEND_ERROR_RATE || '0.05' }}
+  TF_VAR_alert_notification_channels: ${{ vars.GCP_ALERT_NOTIFICATION_CHANNELS || '[]' }}
 
 jobs:
   plan:

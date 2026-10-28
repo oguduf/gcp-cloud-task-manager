@@ -24,7 +24,15 @@ const byName = (a, b) =>
  * @param {() => Promise<unknown>} deps.ping resolves when the database is reachable
  * @param {(line: object) => void} [deps.log] receives one object per request
  */
-function createApp({ employees, ping, log = (line) => console.log(JSON.stringify(line)) }) {
+function createApp({
+  employees,
+  ping,
+  log = (line) => {
+    const serialized = JSON.stringify(line);
+    if (line.level === 'error') console.error(serialized);
+    else console.log(serialized);
+  },
+}) {
   const app = express();
   app.disable('x-powered-by');
 
