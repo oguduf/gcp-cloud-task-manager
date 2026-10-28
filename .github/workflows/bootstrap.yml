@@ -1,0 +1,78 @@
+name: Bootstrap GCP GitHub OIDC
+
+on:
+  workflow_dispatch:
+    inputs:
+      apply:
+        description: Apply the bootstrap after reviewing the plan
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+env:
+  TF_IN_AUTOMATION: "true"
+  TF_INPUT: "false"
+  TF_VAR_project_id: ${{ vars.GCP_PROJECT_ID }}
+  TF_VAR_github_repo: ${{ github.repository }}
+
+jobs:
+  plan:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    defaults:
+      run:
+        working-directory: infra/bootstrap
+    steps:
+      - uses: actions/checkout@v6
+      - uses: google-github-actions/auth@v3
+        with:
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER_TF_PLAN }}
+          service_account: ${{ vars.GCP_TF_PLAN_SA }}
+      - uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: 1.16.5
+          terraform_wrapper: false
+      - run: terraform init -input=false -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}" -backend-config="prefix=profile-app/bootstrap"
+      - run: terraform validate
+      - run: terraform plan -input=false -out=tfplan
+      - uses: actions/upload-artifact@v7
+        with:
+          name: bootstrap-plan
+          path: infra/bootstrap/tfplan
+          retention-days: 1
+
+  apply:
+    if: github.ref == 'refs/heads/main' && inputs.apply
+    needs: plan
+    runs-on: ubuntu-latest
+    environment: infra
+    permissions:
+      contents: read
+      id-token: write
+    defaults:
+      run:
+        working-directory: infra/bootstrap
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/download-artifact@v8
+        with:
+          name: bootstrap-plan
+          path: infra/bootstrap
+      - uses: google-github-actions/auth@v3
+        with:
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER_TF_APPLY }}
+          service_account: ${{ vars.GCP_TF_APPLY_SA }}
+      - uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: 1.16.5
+          terraform_wrapper: false
+      - run: terraform init -input=false -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}" -backend-config="prefix=profile-app/bootstrap"
+      - run: terraform apply -input=false -auto-approve tfplan

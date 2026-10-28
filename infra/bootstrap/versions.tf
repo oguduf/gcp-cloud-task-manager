@@ -1,5 +1,4 @@
-# One-time foundation for the CI/CD pipelines. Run this ONCE by hand, as a
-# project Owner. Everything else (infra/terraform) is then applied by GitHub Actions.
+# One-time foundation for GitHub Actions Workload Identity Federation.
 terraform {
   required_version = ">= 1.6"
 
@@ -10,12 +9,9 @@ terraform {
     }
   }
 
-  # Optional, after the first apply: keep this state in the bucket it created.
-  # Uncomment, set the bucket name, then `terraform init -migrate-state`.
-  # backend "gcs" {
-  #   bucket = "<project>-tfstate"
-  #   prefix = "profile-app/bootstrap"
-  # }
+  # The bucket is created by this root. First apply from Cloud Shell with
+  # `terraform init -backend=false`; then migrate state to the new GCS bucket.
+  backend "gcs" {}
 }
 
 provider "google" {
