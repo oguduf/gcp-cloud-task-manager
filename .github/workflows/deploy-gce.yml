@@ -4,9 +4,8 @@ on:
   push:
     branches: [main]
     paths:
-      - "app/**"
-      - "Dockerfile"
-      - ".dockerignore"
+      - "backend/**"
+      - "frontend/**"
       - "deploy/**"
       - ".github/workflows/deploy-gce.yml"
   workflow_dispatch:
@@ -26,10 +25,32 @@ env:
   BASE_TEMPLATE_PREFIX: ${{ vars.GCP_TEMPLATE_PREFIX }}
   LB_IP_NAME: ${{ vars.GCP_LB_IP_NAME }}
   DOMAIN: ${{ vars.GCP_DOMAIN_NAME }}
-  IMAGE: ${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/${{ vars.GCP_AR_REPO }}/profile-app
+  BACKEND_IMAGE: ${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/${{ vars.GCP_AR_REPO }}/employee-backend
+  FRONTEND_IMAGE: ${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/${{ vars.GCP_AR_REPO }}/employee-frontend
 
 jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install and test
+        run: npm ci && npm test
+
   build-and-deploy:
+    needs: test
     # Terraform must create the regional MIG and baseline template first.
     # Run manually for the first image; enable AUTO_DEPLOY after it succeeds.
     if: github.ref == 'refs/heads/main' && (github.event_name == 'workflow_dispatch' || vars.AUTO_DEPLOY == 'true')
@@ -39,17 +60,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
-
-      - uses: actions/setup-node@v6
-        with:
-          node-version: 20
-          cache: npm
-          cache-dependency-path: app/package-lock.json
-
-      - name: Install app dependencies and run tests
-        run: |
-          npm ci --prefix app
-          npm test --prefix app
 
       # 1) GitHub OIDC token -> GCP STS -> short-lived token for the deployer SA.
       #    No JSON key anywhere.
@@ -63,16 +73,19 @@ jobs:
       - name: Set up gcloud
         uses: google-github-actions/setup-gcloud@v3
 
-      # 2) Build the image and push it to Artifact Registry.
+      # 2) Build immutable frontend and backend images and push to Artifact Registry.
       - name: Configure Docker for Artifact Registry
         run: gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
 
-      - name: Build and push image
+      - name: Build and push images
         run: |
-          docker build -t "${IMAGE}:${GITHUB_SHA}" .
-          docker push "${IMAGE}:${GITHUB_SHA}"
+          docker build -t "${BACKEND_IMAGE}:${GITHUB_SHA}" ./backend
+          docker build -t "${FRONTEND_IMAGE}:${GITHUB_SHA}" ./frontend
+          docker push "${BACKEND_IMAGE}:${GITHUB_SHA}"
+          docker push "${FRONTEND_IMAGE}:${GITHUB_SHA}"
 
-      # A SHA-named template pins every MIG instance to an immutable image.
+      # 3) Clone the immutable baseline template with the new image references.
+      #    The startup script runs both images on each private MIG instance.
       - name: Create release template and roll the regional MIG
         run: |
           BASE_TEMPLATE="$(gcloud compute instance-templates list \
@@ -82,7 +95,7 @@ jobs:
           TEMPLATE="${BASE_TEMPLATE_PREFIX%-template-}-release-${GITHUB_SHA:0:12}"
           gcloud compute instance-templates create "$TEMPLATE" \
             --source-instance-template="$BASE_TEMPLATE" \
-            --metadata="app-image=${IMAGE}:${GITHUB_SHA}"
+            --metadata="app-backend-image=${BACKEND_IMAGE}:${GITHUB_SHA},app-frontend-image=${FRONTEND_IMAGE}:${GITHUB_SHA}"
           gcloud compute instance-groups managed rolling-action start-update "$MIG" \
             --region "$REGION" \
             --version="template=${TEMPLATE}" \
@@ -101,16 +114,18 @@ jobs:
           done
           test "$healthy_mig" = true
 
-      # Verify through the public load balancer and exercise a Firestore read.
+      # 4) Hit the public load balancer and exercise the database health path.
       - name: Smoke test
         run: |
           IP="$(gcloud compute addresses describe "$LB_IP_NAME" --global --format='value(address)')"
           if [ -n "$DOMAIN" ]; then URL="https://${DOMAIN}"; else URL="http://${IP}"; fi
           curl -fsS --retry 30 --retry-delay 5 --retry-all-errors "${URL}/healthz"
-          curl -fsS --retry 10 --retry-delay 3 --retry-all-errors "${URL}/get-profile"
+          curl -fsS --retry 10 --retry-delay 3 --retry-all-errors "${URL}/api/health"
+          curl -fsS --retry 5 --retry-delay 3 --retry-all-errors -o /dev/null "${URL}/"
           {
             echo "### Deployment verified"
-            echo "- Image: \`${IMAGE}:${GITHUB_SHA}\`"
+            echo "- Backend: \`${BACKEND_IMAGE}:${GITHUB_SHA}\`"
+            echo "- Frontend: \`${FRONTEND_IMAGE}:${GITHUB_SHA}\`"
             echo "- URL: ${URL}"
             echo "- Release template: ${BASE_TEMPLATE_PREFIX%-template-}-release-${GITHUB_SHA:0:12}"
           } >> "$GITHUB_STEP_SUMMARY"

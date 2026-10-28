@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Boot a private MIG instance, pull its immutable image, and collect app logs.
+# Start the nginx frontend and Node API containers on a private MIG instance.
 set -euo pipefail
 export DEBIAN_FRONTEND=noninteractive
 
@@ -12,74 +12,43 @@ apt-get update -y
 apt-get install -y ca-certificates curl docker.io python3
 systemctl enable --now docker
 
-IMAGE="$(metadata instance/attributes/app-image)"
+BACKEND_IMAGE="$(metadata instance/attributes/app-backend-image)"
+FRONTEND_IMAGE="$(metadata instance/attributes/app-frontend-image)"
 MONGO_URL="$(metadata instance/attributes/mongo-url)"
 MONGO_DB_NAME="$(metadata instance/attributes/mongo-db-name)"
-REGISTRY_HOST="${IMAGE%%/*}"
+REGISTRY_HOST="${BACKEND_IMAGE%%/*}"
 ACCESS_TOKEN="$(metadata instance/service-accounts/default/token | python3 -c 'import json,sys; print(json.load(sys.stdin)["access_token"])')"
 printf '%s' "$ACCESS_TOKEN" | docker login -u oauth2accesstoken --password-stdin "https://${REGISTRY_HOST}"
-docker pull "$IMAGE"
+unset ACCESS_TOKEN
 
-install -d -m 0750 /opt/profile-app
-install -d -m 0750 -o 1000 -g 1000 /var/log/profile-app
-umask 077
-printf 'MONGO_URL=%s\nMONGO_DB_NAME=%s\n' "$MONGO_URL" "$MONGO_DB_NAME" >/opt/profile-app/app.env
+docker pull "$BACKEND_IMAGE"
+docker pull "$FRONTEND_IMAGE"
+docker network inspect employee-app >/dev/null 2>&1 || docker network create employee-app
+docker rm -f employee-frontend employee-backend >/dev/null 2>&1 || true
 
-cat >/usr/local/sbin/run-profile-app <<'RUN'
-#!/usr/bin/env bash
-set -euo pipefail
-source /opt/profile-app/app.env
-MD="http://metadata.google.internal/computeMetadata/v1"
-IMAGE="$(curl --fail --silent --show-error -H 'Metadata-Flavor: Google' "$MD/instance/attributes/app-image")"
-exec /usr/bin/docker run --name profile-app --publish 80:3000 \
+# The backend is private to the Docker network. It uses its VM's metadata identity
+# for Firestore MongoDB OIDC; nginx is the only container publishing host port 80.
+docker run --detach --name employee-backend \
+  --network employee-app --network-alias backend \
+  --restart unless-stopped --log-driver=gcplogs \
   --add-host metadata:169.254.169.254 \
-  --volume /var/log/profile-app:/var/log/profile-app \
-  --env LOG_FILE=/var/log/profile-app/app.log \
-  --env MONGO_URL="$MONGO_URL" --env MONGO_DB_NAME="$MONGO_DB_NAME" "$IMAGE"
-RUN
-chmod 0750 /usr/local/sbin/run-profile-app
+  --env MONGO_URL="$MONGO_URL" --env MONGO_DB_NAME="$MONGO_DB_NAME" \
+  "$BACKEND_IMAGE"
 
-cat >/etc/systemd/system/profile-app.service <<'UNIT'
-[Unit]
-Description=Profile application container
-After=docker.service
-Requires=docker.service
+docker run --detach --name employee-frontend \
+  --network employee-app --publish 80:80 \
+  --restart unless-stopped --log-driver=gcplogs \
+  "$FRONTEND_IMAGE"
 
-[Service]
-Restart=always
-RestartSec=5
-ExecStartPre=-/usr/bin/docker rm -f profile-app
-ExecStart=/usr/local/sbin/run-profile-app
-ExecStop=/usr/bin/docker stop profile-app
-ExecStopPost=-/usr/bin/docker rm -f profile-app
+# The backend health endpoint confirms its Firestore connection; the MIG/LB
+# health check uses /healthz so an API/database outage is visible separately.
+for attempt in $(seq 1 60); do
+  if curl --fail --silent http://127.0.0.1/api/health >/dev/null; then
+    exit 0
+  fi
+  sleep 5
+done
 
-[Install]
-WantedBy=multi-user.target
-UNIT
-systemctl daemon-reload
-systemctl enable --now profile-app.service
-
-# The Ops Agent parses the app's structured JSON log file into Cloud Logging.
-curl --fail --silent --show-error --location \
-  https://dl.google.com/cloudagents/add-google-cloud-ops-agent-repo.sh \
-  -o /tmp/add-google-cloud-ops-agent-repo.sh
-bash /tmp/add-google-cloud-ops-agent-repo.sh --also-install
-install -d -m 0755 /etc/google-cloud-ops-agent/config.d
-cat >/etc/google-cloud-ops-agent/config.yaml <<'YAML'
-logging:
-  receivers:
-    profile_app:
-      type: files
-      include_paths:
-        - /var/log/profile-app/app.log
-      record_log_file_path: true
-  processors:
-    parse_profile_app_json:
-      type: parse_json
-  service:
-    pipelines:
-      profile_app:
-        receivers: [profile_app]
-        processors: [parse_profile_app_json]
-YAML
-systemctl restart google-cloud-ops-agent
+docker logs --tail 100 employee-backend >&2 || true
+docker logs --tail 100 employee-frontend >&2 || true
+exit 1

@@ -68,7 +68,7 @@ variable "autoscaling_cpu_target" {
 }
 
 variable "initial_image_tag" {
-  description = "Bootstrap image tag placed on the first instance template; app deploy workflow replaces it with a commit SHA image."
+  description = "Bootstrap tag for the initial frontend and backend image references; the app workflow replaces both with commit SHA images."
   type        = string
   default     = "bootstrap"
 }

@@ -10,7 +10,7 @@ resource "google_service_account" "deployer" {
 
 resource "google_service_account" "vm" {
   account_id   = "${var.name}-vm"
-  display_name = "Profile app VM runtime"
+  display_name = "Employee dashboard VM runtime"
 
   depends_on = [google_project_service.apis]
 }

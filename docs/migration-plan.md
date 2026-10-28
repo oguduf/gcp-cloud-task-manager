@@ -8,7 +8,7 @@ The Terraform root uses the existing GCS backend with prefix `profile-app/main`.
 
 1. Review the current state and plan. Verify the existing Firestore database, GCS state bucket, load-balancer IP, VM, and instance group are still managed as expected.
 2. Create the template, regional MIG, autoscaler, monitoring resources, and attach the MIG as a second backend. Keep the existing VM and its backend. This preserves the working route while the new group boots.
-3. Build a real SHA-tagged application image, create a release template, and roll the MIG. Verify at least two healthy MIG backends, `/healthz`, and `/get-profile` through the public load balancer.
+3. Build SHA-tagged frontend and backend images, create a release template, and roll the MIG. Verify at least two healthy MIG backends, `/healthz`, `/api/health`, and the dashboard through the public load balancer.
 4. Observe logs, dashboard, and alerts. If the release fails, direct the MIG to the previous template or rerun the prior successful deployment. The legacy VM remains available during this period.
 5. In a later reviewed Terraform change, remove the old VM backend, instance group, and standalone VM only after the new path is stable. Confirm the plan removes only intended resources and preserves the global IP, load balancer, database, and remote state.
 

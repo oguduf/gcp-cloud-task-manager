@@ -178,8 +178,8 @@ resource "google_project_iam_member" "tf_apply" {
 # not need persistent IAM role-administration permissions.
 resource "google_project_iam_custom_role" "deployer_mig" {
   role_id     = "profileAppMigDeployer"
-  title       = "Profile App MIG Deployer"
-  description = "Create app release templates and roll the profile app regional MIG."
+  title       = "Employee Dashboard MIG Deployer"
+  description = "Create release templates and roll the employee dashboard regional MIG."
   permissions = [
     "compute.globalAddresses.get",
     "compute.globalOperations.get",

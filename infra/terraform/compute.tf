@@ -58,7 +58,7 @@ resource "google_compute_instance" "vm" {
 resource "google_compute_instance_template" "app" {
   name_prefix  = "${var.name}-template-"
   machine_type = var.machine_type
-  description  = "Baseline profile app template; releases use immutable SHA-suffixed copies."
+  description  = "Baseline employee dashboard template; releases use immutable SHA-suffixed copies."
   tags         = ["${var.name}-app"]
 
   disk {
@@ -86,11 +86,12 @@ resource "google_compute_instance_template" "app" {
   }
 
   metadata = {
-    enable-oslogin = "TRUE"
-    startup-script = file("${path.module}/../mig-startup.sh")
-    app-image      = "${var.region}-docker.pkg.dev/${var.project_id}/${var.name}/${var.name}:${var.initial_image_tag}"
-    mongo-url      = local.mongo_url
-    mongo-db-name  = var.firestore_database_id
+    enable-oslogin     = "TRUE"
+    startup-script     = file("${path.module}/../mig-startup.sh")
+    app-backend-image  = "${var.region}-docker.pkg.dev/${var.project_id}/${var.name}/employee-backend:${var.initial_image_tag}"
+    app-frontend-image = "${var.region}-docker.pkg.dev/${var.project_id}/${var.name}/employee-frontend:${var.initial_image_tag}"
+    mongo-url          = local.mongo_url
+    mongo-db-name      = var.firestore_database_id
   }
 
   lifecycle {
@@ -122,7 +123,7 @@ resource "google_compute_region_instance_group_manager" "app" {
 
   auto_healing_policies {
     health_check      = google_compute_health_check.app.id
-    initial_delay_sec = 300
+    initial_delay_sec = 600
   }
 
   update_policy {
