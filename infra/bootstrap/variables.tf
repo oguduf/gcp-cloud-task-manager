@@ -20,7 +20,7 @@ variable "region" {
 }
 
 variable "zone" {
-  description = "Zone for the app VM (passed on to GitHub variables)."
+  description = "Primary zone for the legacy VM (retained for migration compatibility)."
   type        = string
   default     = "us-east1-b"
 }
@@ -29,6 +29,12 @@ variable "app_name" {
   description = "Must match `name` in infra/terraform (used to derive the deploy variables)."
   type        = string
   default     = "profile-app"
+}
+
+variable "domain_name" {
+  description = "Optional public domain configured for managed HTTPS; empty means HTTP-only development mode."
+  type        = string
+  default     = ""
 }
 
 variable "main_branch" {

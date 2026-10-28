@@ -13,9 +13,14 @@ locals {
     GCP_TF_APPLY_SA           = google_service_account.tf_apply.email
 
     # Created later by infra/terraform; names are fixed, so set them now.
-    GCP_DEPLOYER_SA = "gh-deployer@${var.project_id}.iam.gserviceaccount.com"
-    GCP_AR_REPO     = var.app_name
-    GCE_VM_NAME     = "${var.app_name}-vm"
+    GCP_DEPLOYER_SA     = "gh-deployer@${var.project_id}.iam.gserviceaccount.com"
+    GCP_AR_REPO         = var.app_name
+    GCE_VM_NAME         = "${var.app_name}-vm"
+    GCP_MIG_NAME        = "${var.app_name}-mig"
+    GCP_TEMPLATE_PREFIX = "${var.app_name}-template-"
+    GCP_LB_IP_NAME      = "${var.app_name}-lb-ip"
+    GCP_BACKEND_SERVICE = "${var.app_name}-backend"
+    GCP_DOMAIN_NAME     = var.domain_name
   }
 }
 

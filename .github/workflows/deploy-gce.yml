@@ -22,21 +22,34 @@ concurrency:
 env:
   PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
   REGION: ${{ vars.GCP_REGION }}
-  ZONE: ${{ vars.GCP_ZONE }}
-  VM: ${{ vars.GCE_VM_NAME }}
+  MIG: ${{ vars.GCP_MIG_NAME }}
+  BASE_TEMPLATE_PREFIX: ${{ vars.GCP_TEMPLATE_PREFIX }}
+  LB_IP_NAME: ${{ vars.GCP_LB_IP_NAME }}
+  DOMAIN: ${{ vars.GCP_DOMAIN_NAME }}
   IMAGE: ${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/${{ vars.GCP_AR_REPO }}/profile-app
 
 jobs:
   build-and-deploy:
-    # On the first merge, Terraform must create the VM before this job runs.
-    # Run this workflow manually once, then set AUTO_DEPLOY=true for later pushes.
+    # Terraform must create the regional MIG and baseline template first.
+    # Run manually for the first image; enable AUTO_DEPLOY after it succeeds.
     if: github.ref == 'refs/heads/main' && (github.event_name == 'workflow_dispatch' || vars.AUTO_DEPLOY == 'true')
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 45
 
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: Install app dependencies and run tests
+        run: |
+          npm ci --prefix app
+          npm test --prefix app
 
       # 1) GitHub OIDC token -> GCP STS -> short-lived token for the deployer SA.
       #    No JSON key anywhere.
@@ -56,37 +69,48 @@ jobs:
 
       - name: Build and push image
         run: |
-          docker build -t "${IMAGE}:${GITHUB_SHA}" -t "${IMAGE}:latest" .
+          docker build -t "${IMAGE}:${GITHUB_SHA}" .
           docker push "${IMAGE}:${GITHUB_SHA}"
-          docker push "${IMAGE}:latest"
 
-      # 3) Ship compose + deploy script to the VM over IAP (no public SSH port,
-      #    no SSH key stored in GitHub - OS Login issues a short-lived one).
-      - name: Copy deploy files to the VM
+      # A SHA-named template pins every MIG instance to an immutable image.
+      - name: Create release template and roll the regional MIG
         run: |
-          SSH_FLAGS=(--zone "$ZONE" --tunnel-through-iap --quiet --strict-host-key-checking=no)
-          gcloud compute ssh "$VM" "${SSH_FLAGS[@]}" --command "mkdir -p /tmp/profile-app"
-          gcloud compute scp deploy/docker-compose.yml deploy/deploy.sh \
-            "$VM:/tmp/profile-app/" "${SSH_FLAGS[@]}"
+          BASE_TEMPLATE="$(gcloud compute instance-templates list \
+            --filter="name~${BASE_TEMPLATE_PREFIX}" \
+            --sort-by='~creationTimestamp' --limit=1 --format='value(name)')"
+          test -n "$BASE_TEMPLATE"
+          TEMPLATE="${BASE_TEMPLATE_PREFIX%-template-}-release-${GITHUB_SHA:0:12}"
+          gcloud compute instance-templates create "$TEMPLATE" \
+            --source-instance-template="$BASE_TEMPLATE" \
+            --metadata="app-image=${IMAGE}:${GITHUB_SHA}"
+          gcloud compute instance-groups managed rolling-action start-update "$MIG" \
+            --region "$REGION" \
+            --version="template=${TEMPLATE}" \
+            --max-surge=1 \
+            --max-unavailable=0
+          gcloud compute instance-groups managed wait-until "$MIG" \
+            --region "$REGION" --stable --timeout=20m
+          healthy_mig=false
+          for attempt in $(seq 1 40); do
+            INSTANCES="$(gcloud compute instance-groups managed list-instances "$MIG" --region "$REGION" --format=json)"
+            if printf '%s' "$INSTANCES" | python3 -c 'import json,sys; items=json.load(sys.stdin); healthy=sum(1 for item in items if item.get("instanceStatus")=="RUNNING" and item.get("currentAction")=="NONE" and any(h.get("healthState")=="HEALTHY" for h in item.get("instanceHealth",[]))); print(f"Healthy MIG instances: {healthy}/{len(items)}"); sys.exit(0 if healthy >= 2 else 1)'; then
+              healthy_mig=true
+              break
+            fi
+            sleep 30
+          done
+          test "$healthy_mig" = true
 
-      # 4) On the VM: read the Firestore connection string from instance metadata,
-      #    pull the new image (VM's own SA), docker compose up, check /healthz
-      #    and a real Firestore read (/get-profile).
-      - name: Deploy on the VM
-        run: |
-          gcloud compute ssh "$VM" --zone "$ZONE" --tunnel-through-iap --quiet \
-            --strict-host-key-checking=no \
-            --command "sudo bash /tmp/profile-app/deploy.sh '${IMAGE}:${GITHUB_SHA}'"
-
-      # 5) Hit the public load balancer, not the VM (which has no external IP).
+      # Verify through the public load balancer and exercise a Firestore read.
       - name: Smoke test
         run: |
-          LB_IP_NAME="${VM%-vm}-lb-ip"
           IP="$(gcloud compute addresses describe "$LB_IP_NAME" --global --format='value(address)')"
-          curl -fsS --retry 20 --retry-delay 3 --retry-all-errors "http://${IP}/healthz"
-          curl -fsS --retry 10 --retry-delay 3 --retry-all-errors "http://${IP}/get-profile"   # end-to-end: LB -> app -> Firestore
+          if [ -n "$DOMAIN" ]; then URL="https://${DOMAIN}"; else URL="http://${IP}"; fi
+          curl -fsS --retry 30 --retry-delay 5 --retry-all-errors "${URL}/healthz"
+          curl -fsS --retry 10 --retry-delay 3 --retry-all-errors "${URL}/get-profile"
           {
-            echo "### Deployed :rocket:"
+            echo "### Deployment verified"
             echo "- Image: \`${IMAGE}:${GITHUB_SHA}\`"
-            echo "- URL: http://${IP}"
+            echo "- URL: ${URL}"
+            echo "- Release template: ${BASE_TEMPLATE_PREFIX%-template-}-release-${GITHUB_SHA:0:12}"
           } >> "$GITHUB_STEP_SUMMARY"

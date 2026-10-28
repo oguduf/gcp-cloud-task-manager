@@ -1,0 +1,77 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="720" viewBox="0 0 1200 720" role="img" aria-labelledby="title description">
+  <title id="title">GCP Cloud Task Manager target architecture</title>
+  <desc id="description">Internet users connect through an external application load balancer to private Compute Engine instances in a regional managed instance group. Instances use Firestore outside the VPC and send logs and metrics to Cloud Monitoring. Cloud NAT supports package downloads. GitHub Actions uses Workload Identity Federation to publish images and roll the managed instance group.</desc>
+  <defs>
+    <style>
+      text { font-family: Arial, sans-serif; fill: #172b4d; }
+      .title { font-size: 24px; font-weight: 700; }
+      .label { font-size: 16px; font-weight: 700; }
+      .small { font-size: 13px; }
+      .zone { fill: #f3f7fc; stroke: #5f7d9c; stroke-width: 2; }
+      .box { fill: #fff; stroke: #426b8f; stroke-width: 2; rx: 12; }
+      .gcp { fill: #e8f2ff; }
+      .managed { fill: #eaf7ed; stroke: #3d8b53; }
+      .legacy { fill: #fff4df; stroke: #bd7e11; stroke-dasharray: 7 5; }
+      .obs { fill: #f1ebff; stroke: #7552a6; }
+      .line { stroke: #426b8f; stroke-width: 3; fill: none; marker-end: url(#arrow); }
+      .dash { stroke-dasharray: 7 5; }
+    </style>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#426b8f"/></marker>
+  </defs>
+  <text class="title" x="600" y="38" text-anchor="middle">GCP Cloud Task Manager · target architecture</text>
+
+  <rect class="zone" x="34" y="74" width="1132" height="448" rx="18"/>
+  <text class="label" x="54" y="103">Google Cloud project · us-east1</text>
+
+  <rect class="box gcp" x="72" y="160" width="185" height="92"/>
+  <text class="label" x="164" y="190" text-anchor="middle">External Application</text>
+  <text class="label" x="164" y="212" text-anchor="middle">Load Balancer</text>
+  <text class="small" x="164" y="235" text-anchor="middle">Public IP · HTTP / HTTPS</text>
+
+  <rect class="zone" x="324" y="126" width="530" height="344" rx="14"/>
+  <text class="label" x="344" y="154">Custom VPC · private subnet · Private Google Access</text>
+  <rect class="box managed" x="356" y="180" width="465" height="170"/>
+  <text class="label" x="588" y="208" text-anchor="middle">Regional Managed Instance Group</text>
+  <text class="small" x="588" y="230" text-anchor="middle">Minimum 2 · multiple zones · autohealing · autoscaling</text>
+  <rect class="box gcp" x="382" y="251" width="185" height="76"/>
+  <text class="label" x="474" y="280" text-anchor="middle">Private VM 1</text>
+  <text class="small" x="474" y="303" text-anchor="middle">Docker app · port 80</text>
+  <rect class="box gcp" x="610" y="251" width="185" height="76"/>
+  <text class="label" x="702" y="280" text-anchor="middle">Private VM 2+</text>
+  <text class="small" x="702" y="303" text-anchor="middle">Docker app · port 80</text>
+
+  <rect class="box legacy" x="356" y="374" width="465" height="70"/>
+  <text class="label" x="588" y="402" text-anchor="middle">Existing standalone VM · temporary migration backend</text>
+  <text class="small" x="588" y="426" text-anchor="middle">Remove after MIG release and health checks are verified</text>
+
+  <rect class="box managed" x="908" y="164" width="218" height="88"/>
+  <text class="label" x="1017" y="194" text-anchor="middle">Firestore</text>
+  <text class="small" x="1017" y="217" text-anchor="middle">Google-managed · regional data</text>
+  <text class="small" x="1017" y="237" text-anchor="middle">VM service account · TLS 443</text>
+
+  <rect class="box obs" x="908" y="304" width="218" height="108"/>
+  <text class="label" x="1017" y="334" text-anchor="middle">Cloud Logging</text>
+  <text class="small" x="1017" y="356" text-anchor="middle">Ops Agent · Docker logs</text>
+  <text class="label" x="1017" y="382" text-anchor="middle">Cloud Monitoring</text>
+  <text class="small" x="1017" y="402" text-anchor="middle">Dashboard · alerts · uptime</text>
+
+  <rect class="box gcp" x="908" y="438" width="218" height="60"/>
+  <text class="label" x="1017" y="463" text-anchor="middle">Cloud NAT</text>
+  <text class="small" x="1017" y="483" text-anchor="middle">Package and image egress</text>
+
+  <circle cx="115" cy="319" r="26" fill="#fff" stroke="#426b8f" stroke-width="2"/>
+  <text class="label" x="115" y="325" text-anchor="middle">Users</text>
+  <path class="line" d="M 142 319 C 190 319, 206 260, 206 253"/>
+  <path class="line" d="M 257 206 L 355 206"/>
+  <text class="small" x="305" y="194" text-anchor="middle">HTTP(S)</text>
+  <path class="line" d="M 821 278 C 862 278, 863 209, 907 209"/>
+  <text class="small" x="863" y="266" text-anchor="middle">Private Google Access</text>
+  <path class="line" d="M 795 300 C 850 300, 852 352, 907 352"/>
+  <path class="line" d="M 795 313 C 855 313, 852 463, 907 463"/>
+
+  <rect class="box" x="72" y="576" width="1054" height="100"/>
+  <text class="label" x="98" y="609">Delivery path</text>
+  <text class="small" x="98" y="635">GitHub Actions OIDC → Workload Identity Federation → Artifact Registry (SHA-tagged image)</text>
+  <text class="small" x="98" y="657">→ create release instance template → controlled regional MIG rolling update → backend health and public smoke checks</text>
+  <path class="line dash" d="M 598 576 L 598 470"/>
+</svg>

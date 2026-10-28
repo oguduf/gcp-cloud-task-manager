@@ -1,7 +1,10 @@
-# Profile app on a GCE VM (GitHub Actions + OIDC)
+# GCP Cloud Task Manager
 
-Node.js app on a single Compute Engine VM (Docker Compose), with
-**Firestore with MongoDB compatibility** as the database.
+Node.js application on private Compute Engine instances, behind a global external
+Application Load Balancer. Terraform provisions a regional managed instance
+group, autoscaling, Firestore, Artifact Registry, and centralized monitoring.
+GitHub Actions builds immutable images and rolls them through the MIG using
+Workload Identity Federation.
 
 Keyless end to end:
 - GitHub Actions authenticates to Google Cloud with **Workload Identity Federation (OIDC)**.
@@ -18,34 +21,40 @@ flowchart LR
     wif[Workload Identity Federation<br/>repo == yours && ref == main]
     sa[gh-deployer SA]
     ar[(Artifact Registry)]
-    lb[External Application Load Balancer<br/>public HTTP IP]
-    nat[Cloud NAT<br/>outbound only]
-    iap[Identity-Aware Proxy<br/>:22 only]
-    fs[(Firestore<br/>MongoDB compat<br/>db: user-account)]
-    subgraph VM[Compute Engine VM - SA profile-app-vm]
-      app[my-app :80] -- ID token aud=FIRESTORE --> md[metadata server]
+    lb[External Application Load Balancer<br/>HTTP dev or HTTPS with domain]
+    nat[Cloud NAT<br/>private VM egress]
+    fs[(Firestore<br/>managed regional service<br/>db: user-account)]
+    subgraph VM[Private subnet · regional MIG · min 2 VMs]
+      app1[Docker app VM 1 :80]
+      app2[Docker app VM 2 :80]
+      app1 -- ADC / VM service account --> fs
+      app2 -- ADC / VM service account --> fs
     end
+    logging[Cloud Logging + Ops Agent]
+    monitoring[Cloud Monitoring<br/>dashboard + alerts + uptime]
   end
-  users((Users)) -- HTTP :80 --> lb --> VM
-  runner -- "1 OIDC JWT" --> wif
-  wif -- "2 impersonate" --> sa
-  sa -- "3 short-lived token" --> runner
-  runner -- "4 docker push" --> ar
-  runner -- "5 ssh/scp via IAP" --> iap
-  iap -- "6 sudo deploy.sh" --> VM
-  VM -- "7 pull image via NAT" --> nat --> ar
-  app -- "8 MONGODB-OIDC, TLS 443" --> fs
+  users((Users)) -- HTTP :80 or HTTPS :443 --> lb --> VM
+  VM --> nat
+  VM --> logging --> monitoring
+  runner -- "OIDC JWT" --> wif
+  wif -- "short-lived SA credentials" --> sa
+  runner -- "build and push SHA image" --> ar
+  runner -- "create release template and roll" --> VM
+  VM -- "pull image" --> ar
 ```
 
 ## Layout
 
 | Path | What it is |
 |---|---|
-| `.github/workflows/deploy-gce.yml` | App: build → push to Artifact Registry → deploy over IAP SSH → smoke test |
+| `.github/workflows/deploy-gce.yml` | App: build immutable SHA image → push to Artifact Registry → version template → rolling MIG update → health and Firestore smoke tests |
 | `.github/workflows/terraform.yml` | Infra: plan on PRs (posted as a comment) → approve → apply on `main` |
 | `infra/bootstrap/` | Run once by hand: state bucket, GitHub OIDC trust, `tf-plan` / `tf-apply` service accounts |
-| `infra/terraform/` | App infrastructure: private VM/subnet, external HTTP load balancer, Cloud NAT, Firestore, Artifact Registry, IAM |
-| `infra/vm-startup.sh` | VM startup script that installs Docker + compose plugin |
+| `infra/terraform/` | App infrastructure: private VPC, legacy VM retained during migration, regional MIG, external load balancer, Cloud NAT, Firestore, Artifact Registry, IAM |
+| `infra/vm-startup.sh` | Startup helper retained for the legacy VM during migration |
+| `infra/mig-startup.sh` | MIG startup script: Docker, immutable image, systemd, and Ops Agent log collection |
+| `infra/terraform/autoscaling.tf` | Regional MIG CPU autoscaling policy |
+| `infra/terraform/monitoring.tf` | Dashboard, app log metric, uptime check, and alert policies |
 | `deploy/docker-compose.yml` | What runs on the VM (`/opt/profile-app`) |
 | `deploy/deploy.sh` | Runs on the VM: writes `.env` (image + Firestore URL from instance metadata), pulls, `compose up`, health + DB check |
 | `docker-compose.yaml` | Local development only: a MongoDB container + mongo-express |
@@ -65,7 +74,7 @@ Each job logs in with its own Workload Identity provider and service account:
 |---|---|---|---|
 | Terraform plan | PRs in this repo, or `main` | `tf-plan` | read the project and the state (plan runs with `-lock=false`) |
 | Terraform apply | `main` **and** environment `infra` | `tf-apply` | create/change everything in `infra/terraform` |
-| App deploy | `main` | `gh-deployer` | push images, SSH to the one VM |
+| App deploy | `main` | `gh-deployer` | push images and perform a controlled regional MIG rollout |
 
 Each provider stamps its tokens with `attribute.purpose`, and each service account trusts
 only its own purpose, so a pull-request token can never be used to apply or deploy.
@@ -118,6 +127,10 @@ only its own purpose, so a pull-request token can never be used to apply or depl
 Optional but recommended: commit `infra/terraform/.terraform.lock.hcl` (create it with
 `terraform init -backend=false` in that folder) so CI always uses the same provider versions.
 
+## Cost drivers
+
+The largest always-on change is the regional MIG minimum of two Compute Engine VMs. During migration, the old standalone VM also remains online, temporarily bringing the app tier to at least three VMs. Other billable usage can include the external load balancer and forwarding rules, Cloud NAT, Firestore operations/storage, Artifact Registry image storage, Cloud Logging ingestion/retention, and network egress. The HTTP-only lab mode avoids certificate/domain setup but does not encrypt browser traffic. Review the GCP project billing estimate and alert/log retention choices before applying.
+
 ### Changing infrastructure
 
 Open a pull request that changes `infra/terraform/`. The plan appears as a comment on the PR.
@@ -134,40 +147,33 @@ cd ../bootstrap && terraform destroy   # remove prevent_destroy on the bucket fi
 ```
 A deleted Workload Identity Pool ID stays reserved for 30 days.
 
-## Networking
+## Target architecture and networking
 
-GCP's external Application Load Balancer has a public global IP; it is **not
-inside a public subnet**. The existing `profile-app-subnet` is the private VM
-subnet. Firestore is a managed service outside the VPC, reached from the VM
-through Private Google Access. This is still a single-VM deployment, so the
-load balancer does not make the application highly available.
+The external Application Load Balancer is a Google-managed global frontend,
+not a VM placed in a public subnet. It sends traffic to a regional MIG whose
+instances have private addresses only. The existing standalone VM remains a
+temporary second backend during migration. Firestore is a Google-managed
+regional service outside the VPC; the private subnet enables Private Google
+Access for the app's Firestore API connection. Cloud NAT provides outbound
+internet access for OS and Docker package downloads.
 
-```mermaid
-flowchart LR
-  browser[Browser] -- HTTP :80 --> lb[External Application Load Balancer]
-  lb --> vm[Private Compute Engine VM]
-  vm -- TLS :443 / Private Google Access --> fs[(Firestore)]
-  vm -- outbound only --> nat[Cloud NAT] --> internet[Docker and package downloads]
-  github[GitHub Actions] -- IAP SSH --> vm
-```
+See [the architecture diagram](docs/architecture-diagram.svg) and
+[architecture details](docs/architecture.md).
+The older `docs/networking-diagram.svg` and `.png` show the previous single-VM
+design; use the new architecture diagram for the target MIG design.
 
-| Resource | Name | Settings |
-|---|---|---|
-| VPC | `profile-app-vpc` | custom subnet mode (no default-network open rules) |
-| Subnet | `profile-app-subnet` | private VM subnet `10.10.0.0/24`, `us-east1`, Private Google Access on |
-| Load balancer | `profile-app-http` | public global HTTP `:80` → single-VM instance group; `/healthz` check |
-| Firewall | `profile-app-allow-http` | ingress `tcp:80` only from Google load-balancer and health-check ranges → VM service account |
-| Firewall | `profile-app-allow-iap-ssh` | ingress `tcp:22` from `35.235.240.0/20` (IAP) → VM service account |
-| Firewall | implied | deny all other ingress, allow all egress |
-| Address | `profile-app-lb-ip` | global static external IP on the load balancer; VM internal IP `10.10.0.10`, no external IP |
-| Cloud NAT | `profile-app-nat` | outbound internet access for the private VM, not inbound access |
+| Resource | Settings |
+|---|---|
+| VPC and subnet | Custom VPC; private subnet; Private Google Access enabled |
+| Regional MIG | At least two VMs across configurable zones; autohealing, rolling updates, CPU autoscaling |
+| Load balancer | Global external Application Load Balancer; HTTP-only without a domain, HTTPS plus HTTP redirect with a valid domain |
+| Firewall | App ingress on TCP 80 only from Google load-balancer and health-check ranges; no public VM IP; IAP TCP 22 for authorized administration |
+| Cloud NAT | Private VM outbound access only; no unsolicited inbound connections |
+| Firestore | Managed regional database; app accesses it over TLS 443 with VM service-account credentials |
 
-Docker only publishes host `:80 → my-app:3000`. The database is a managed service reached
-outbound on TLS 443, so it needs no inbound firewall rule. The external IP and
-HTTP URL change when this migration is applied. Since the load balancer has only
-one backend, it returns an error until the app is running and `/healthz` passes.
-Apply this change only after reviewing the Terraform plan and arranging a
-cutover window; the old VM address is removed.
+The subnet CIDR, region, zones, machine type, MIG size range, and domain are
+configurable in `infra/terraform/variables.tf`. Never put Firestore inside the
+VPC diagram: only the VMs are subnet resources.
 
 ## Database: Firestore with MongoDB compatibility
 
