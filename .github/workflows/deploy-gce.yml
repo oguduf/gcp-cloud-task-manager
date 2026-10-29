@@ -127,24 +127,40 @@ jobs:
               interface.pop("name", None)
           Path(destination).write_text(json.dumps(template))
           PY
-          ACCESS_TOKEN="$(gcloud auth print-access-token)"
-          curl --fail-with-body --silent --show-error \
-            -X POST \
-            -H "Authorization: Bearer ${ACCESS_TOKEN}" \
-            -H "Content-Type: application/json" \
-            --data-binary "@${RELEASE_CONFIG}" \
-            "https://compute.googleapis.com/compute/v1/projects/${PROJECT_ID}/global/instanceTemplates" \
-            > "$OPERATION"
-          OPERATION_NAME="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["name"])' "$OPERATION")"
-          OPERATION_STATUS="PENDING"
-          for attempt in $(seq 1 60); do
+          if gcloud compute instance-templates describe "$TEMPLATE" --format=json > "$OPERATION" 2>/dev/null; then
+            python3 - "$OPERATION" "${BACKEND_IMAGE}:${GITHUB_SHA}" "${FRONTEND_IMAGE}:${GITHUB_SHA}" <<'PY'
+          import json
+          import sys
+          template = json.load(open(sys.argv[1]))
+          expected = {
+              "app-backend-image": sys.argv[2],
+              "app-frontend-image": sys.argv[3],
+          }
+          actual = {item.get("key"): item.get("value") for item in template.get("properties", {}).get("metadata", {}).get("items", [])}
+          mismatches = [key for key, value in expected.items() if actual.get(key) != value]
+          if mismatches:
+              raise SystemExit(f"Existing release template has unexpected image metadata: {mismatches}")
+          print("Reusing the matching release template created by an earlier attempt.")
+          PY
+          else
+            ACCESS_TOKEN="$(gcloud auth print-access-token)"
             curl --fail-with-body --silent --show-error \
+              -X POST \
               -H "Authorization: Bearer ${ACCESS_TOKEN}" \
-              "https://compute.googleapis.com/compute/v1/projects/${PROJECT_ID}/global/operations/${OPERATION_NAME}" \
+              -H "Content-Type: application/json" \
+              --data-binary "@${RELEASE_CONFIG}" \
+              "https://compute.googleapis.com/compute/v1/projects/${PROJECT_ID}/global/instanceTemplates" \
               > "$OPERATION"
-            OPERATION_STATUS="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("status", "UNKNOWN"))' "$OPERATION")"
-            if [ "$OPERATION_STATUS" = "DONE" ]; then
-              python3 - "$OPERATION" <<'PY'
+            OPERATION_NAME="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["name"])' "$OPERATION")"
+            OPERATION_STATUS="PENDING"
+            for attempt in $(seq 1 60); do
+              curl --fail-with-body --silent --show-error \
+                -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+                "https://compute.googleapis.com/compute/v1/projects/${PROJECT_ID}/global/operations/${OPERATION_NAME}" \
+                > "$OPERATION"
+              OPERATION_STATUS="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("status", "UNKNOWN"))' "$OPERATION")"
+              if [ "$OPERATION_STATUS" = "DONE" ]; then
+                python3 - "$OPERATION" <<'PY'
           import json
           import sys
           operation = json.load(open(sys.argv[1]))
@@ -152,11 +168,12 @@ jobs:
           if errors:
               raise SystemExit("; ".join(error.get("message", str(error)) for error in errors))
           PY
-              break
-            fi
-            sleep 5
-          done
-          test "$OPERATION_STATUS" = "DONE"
+                break
+              fi
+              sleep 5
+            done
+            test "$OPERATION_STATUS" = "DONE"
+          fi
           gcloud compute instance-groups managed rolling-action start-update "$MIG" \
             --region "$REGION" \
             --version="template=${TEMPLATE}" \
