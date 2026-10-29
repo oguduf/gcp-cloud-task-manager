@@ -71,9 +71,56 @@ resource "google_project_iam_member" "deployer_compute_viewer" {
   member  = google_service_account.deployer.member
 }
 
-# Bootstrap creates the project-scoped custom role before this root binds it.
+# This root owns the deployer custom role and its binding.
+resource "google_project_iam_member" "tf_apply_temporary_role_admin" {
+  project = var.project_id
+  role    = "roles/iam.roleAdmin"
+  member  = "serviceAccount:tf-apply@${var.project_id}.iam.gserviceaccount.com"
+
+  depends_on = [google_project_service.apis]
+}
+
+resource "google_project_iam_member" "tf_apply_observability" {
+  for_each = toset([
+    "roles/logging.configWriter",
+    "roles/monitoring.alertPolicyEditor",
+    "roles/monitoring.dashboardEditor",
+    "roles/monitoring.uptimeCheckConfigEditor",
+  ])
+
+  project = var.project_id
+  role    = each.value
+  member  = "serviceAccount:tf-apply@${var.project_id}.iam.gserviceaccount.com"
+
+  depends_on = [google_project_service.apis]
+}
+
+resource "google_project_iam_custom_role" "deployer_mig" {
+  role_id     = "profileAppMigDeployer"
+  title       = "Employee Dashboard MIG Deployer"
+  description = "Create release templates and roll the employee dashboard regional MIG."
+  permissions = [
+    "compute.globalAddresses.get",
+    "compute.globalOperations.get",
+    "compute.globalOperations.list",
+    "compute.instanceTemplates.create",
+    "compute.instanceTemplates.get",
+    "compute.instanceTemplates.list",
+    "compute.instanceTemplates.useReadOnly",
+    "compute.instances.get",
+    "compute.instances.list",
+    "compute.instanceGroupManagers.get",
+    "compute.instanceGroupManagers.list",
+    "compute.instanceGroupManagers.update",
+    "compute.regionOperations.get",
+    "compute.regionOperations.list",
+  ]
+
+  # Temporary self-grant is removed in the follow-up gated apply.
+  depends_on = [google_project_iam_member.tf_apply_temporary_role_admin]
+}
 resource "google_project_iam_member" "deployer_mig" {
   project = var.project_id
-  role    = "projects/${var.project_id}/roles/profileAppMigDeployer"
+  role    = google_project_iam_custom_role.deployer_mig.name
   member  = google_service_account.deployer.member
 }
