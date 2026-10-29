@@ -130,8 +130,9 @@ resource "google_compute_region_instance_group_manager" "app" {
     type                           = "PROACTIVE"
     minimal_action                 = "REPLACE"
     most_disruptive_allowed_action = "REPLACE"
-    max_surge_fixed                = 1
-    max_unavailable_fixed          = 0
+    # Regional MIG surge must be zero or at least one extra per configured zone.
+    max_surge_fixed       = length(var.zones)
+    max_unavailable_fixed = 0
   }
 
   lifecycle {
