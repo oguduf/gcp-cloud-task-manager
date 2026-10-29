@@ -53,7 +53,7 @@ resource "google_monitoring_uptime_check_config" "app" {
 
 locals {
   lb_resource_filter = "resource.type=\"https_lb_rule\" AND resource.label.url_map_name=\"${var.name}-routes\""
-  cpu_filter         = "metric.type=\"compute.googleapis.com/instance/cpu/utilization\" AND resource.type=\"gce_instance\" AND resource.label.instance_name = starts_with(\"${var.name}-\")"
+  cpu_filter         = "metric.type=\"compute.googleapis.com/instance/cpu/utilization\" AND resource.type=\"gce_instance\""
 }
 
 resource "google_monitoring_dashboard" "app" {
@@ -118,7 +118,7 @@ resource "google_monitoring_dashboard" "app" {
           xyChart = { dataSets = [{
             plotType = "STACKED_BAR"
             timeSeriesQuery = { timeSeriesFilter = {
-              filter      = "metric.type=\"logging.googleapis.com/user/${google_logging_metric.mig_unhealthy_events.name}\""
+              filter      = "metric.type=\"logging.googleapis.com/user/${google_logging_metric.mig_unhealthy_events.name}\" AND resource.type=\"gce_instance_group_manager\""
               aggregation = { alignmentPeriod = "60s", perSeriesAligner = "ALIGN_SUM", crossSeriesReducer = "REDUCE_SUM" }
             } }
           }] }
@@ -138,7 +138,7 @@ resource "google_monitoring_dashboard" "app" {
           xyChart = { dataSets = [{
             plotType = "LINE"
             timeSeriesQuery = { timeSeriesFilter = {
-              filter      = "metric.type=\"logging.googleapis.com/user/${google_logging_metric.app_errors.name}\""
+              filter      = "metric.type=\"logging.googleapis.com/user/${google_logging_metric.app_errors.name}\" AND resource.type=\"gce_instance\""
               aggregation = { alignmentPeriod = "60s", perSeriesAligner = "ALIGN_RATE", crossSeriesReducer = "REDUCE_SUM" }
             } }
           }] }
@@ -200,7 +200,7 @@ resource "google_monitoring_alert_policy" "backend_errors" {
   conditions {
     display_name = "Backend error rate is nonzero"
     condition_threshold {
-      filter          = "metric.type=\"network.googleapis.com/loadbalancer/backend/error_rate\" AND resource.type=\"gce_backend_service\""
+      filter          = "metric.type=\"network.googleapis.com/loadbalancer/backend/error_rate\" AND resource.type=\"load_balancer_backend\""
       comparison      = "COMPARISON_GT"
       threshold_value = var.alert_backend_error_rate
       duration        = "300s"
@@ -242,7 +242,7 @@ resource "google_monitoring_alert_policy" "app_errors" {
   conditions {
     display_name = "Application emits error logs"
     condition_threshold {
-      filter          = "metric.type=\"logging.googleapis.com/user/${google_logging_metric.app_errors.name}\""
+      filter          = "metric.type=\"logging.googleapis.com/user/${google_logging_metric.app_errors.name}\" AND resource.type=\"gce_instance\""
       comparison      = "COMPARISON_GT"
       threshold_value = 0
       duration        = "300s"
@@ -263,7 +263,7 @@ resource "google_monitoring_alert_policy" "mig_unhealthy" {
   conditions {
     display_name = "MIG health state changes to UNHEALTHY"
     condition_threshold {
-      filter          = "metric.type=\"logging.googleapis.com/user/${google_logging_metric.mig_unhealthy_events.name}\""
+      filter          = "metric.type=\"logging.googleapis.com/user/${google_logging_metric.mig_unhealthy_events.name}\" AND resource.type=\"gce_instance_group_manager\""
       comparison      = "COMPARISON_GT"
       threshold_value = 0
       duration        = "0s"
