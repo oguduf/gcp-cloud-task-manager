@@ -52,8 +52,8 @@ jobs:
   build-and-deploy:
     needs: test
     # Terraform must create the regional MIG and baseline template first.
-    # Run manually for the first image; enable AUTO_DEPLOY after it succeeds.
-    if: github.ref == 'refs/heads/main' && (github.event_name == 'workflow_dispatch' || vars.AUTO_DEPLOY == 'true')
+    # The first deployment is manual; subsequent main-branch pushes deploy automatically.
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 45
 
@@ -95,46 +95,48 @@ jobs:
           TEMPLATE="${BASE_TEMPLATE_PREFIX%-template-}-release-${GITHUB_SHA:0:12}"
           BASE_CONFIG="$(mktemp)"
           RELEASE_CONFIG="$(mktemp)"
-          gcloud compute instance-templates export "$BASE_TEMPLATE" \
-            --global --destination="$BASE_CONFIG"
+          OPERATION="$(mktemp)"
+          trap 'rm -f "$BASE_CONFIG" "$RELEASE_CONFIG" "$OPERATION"' EXIT
+          gcloud compute instance-templates describe "$BASE_TEMPLATE" --format=json > "$BASE_CONFIG"
           python3 - "$BASE_CONFIG" "$RELEASE_CONFIG" "$TEMPLATE" \
             "${BACKEND_IMAGE}:${GITHUB_SHA}" "${FRONTEND_IMAGE}:${GITHUB_SHA}" <<'PY'
           import json
-          import re
           import sys
           from pathlib import Path
 
           source, destination, name, backend_image, frontend_image = sys.argv[1:]
-          text = Path(source).read_text()
-          text, count = re.subn(r"(?m)^name:.*$", f"name: {name}", text, count=1)
-          if count != 1:
-              raise SystemExit("Exported instance template did not contain exactly one name")
-
-          lines = text.splitlines()
-
-          def set_metadata(key, value):
-              key_pattern = re.compile(r"^([ \t]*)-\s+key:\s*" + re.escape(key) + r"\s*$")
-              for index, line in enumerate(lines):
-                  match = key_pattern.match(line)
-                  if not match:
-                      continue
-                  for value_index in range(index + 1, len(lines)):
-                      if re.match(r"^\s*-\s+key:", lines[value_index]):
-                          break
-                      value_match = re.match(r"^(\s*)value\s*:", lines[value_index])
-                      if value_match:
-                          lines[value_index] = f"{value_match.group(1)}value: {json.dumps(value)}"
-                          return
-                  raise SystemExit(f"Metadata key {key} has no value in exported template")
-              raise SystemExit(f"Metadata key {key} was not present in exported template")
-
-          set_metadata("app-backend-image", backend_image)
-          set_metadata("app-frontend-image", frontend_image)
-          Path(destination).write_text("\n".join(lines) + "\n")
+          template = json.loads(Path(source).read_text())
+          for field in ("id", "creationTimestamp", "selfLink", "kind", "region"):
+              template.pop(field, None)
+          template["name"] = name
+          properties = template.get("properties", {})
+          metadata = properties.get("metadata", {})
+          metadata.pop("fingerprint", None)
+          found = set()
+          for item in metadata.get("items", []):
+              if item.get("key") == "app-backend-image":
+                  item["value"] = backend_image
+                  found.add("app-backend-image")
+              elif item.get("key") == "app-frontend-image":
+                  item["value"] = frontend_image
+                  found.add("app-frontend-image")
+          missing = {"app-backend-image", "app-frontend-image"} - found
+          if missing:
+              raise SystemExit(f"Baseline template is missing metadata keys: {sorted(missing)}")
+          for interface in properties.get("networkInterfaces", []):
+              interface.pop("name", None)
+          Path(destination).write_text(json.dumps(template))
           PY
-          gcloud compute instance-templates import "$TEMPLATE" \
-            --global --source="$RELEASE_CONFIG" --quiet
-          rm -f "$BASE_CONFIG" "$RELEASE_CONFIG"
+          ACCESS_TOKEN="$(gcloud auth print-access-token)"
+          curl --fail-with-body --silent --show-error \
+            -X POST \
+            -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+            -H "Content-Type: application/json" \
+            --data-binary "@${RELEASE_CONFIG}" \
+            "https://compute.googleapis.com/compute/v1/projects/${PROJECT_ID}/global/instanceTemplates" \
+            > "$OPERATION"
+          OPERATION_NAME="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["name"])' "$OPERATION")"
+          gcloud compute operations wait "$OPERATION_NAME" --global --quiet
           gcloud compute instance-groups managed rolling-action start-update "$MIG" \
             --region "$REGION" \
             --version="template=${TEMPLATE}" \
