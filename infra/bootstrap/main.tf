@@ -39,6 +39,14 @@ locals {
     "roles/artifactregistry.admin",
     "roles/datastore.owner",
     "roles/iap.admin",
+    # TEMPORARY: required to create the project-scoped deployer role; remove
+    # after the custom role exists and rerun bootstrap apply to revoke this grant.
+    "roles/iam.roleAdmin",
+    # Permissions required to manage the Terraform-owned observability resources.
+    "roles/logging.configWriter",
+    "roles/monitoring.alertPolicyEditor",
+    "roles/monitoring.dashboardEditor",
+    "roles/monitoring.uptimeCheckConfigEditor",
   ]
 }
 
@@ -174,9 +182,10 @@ resource "google_project_iam_member" "tf_apply" {
 }
 
 # GitHub's app deploy identity needs only these release operations. The custom
-# role is owned by bootstrap so the approval-gated Terraform apply identity does
-# not need persistent IAM role-administration permissions.
+# Bootstrap owns this custom role. Role administration is granted temporarily
+# to the gated apply identity only to create the role, then removed.
 resource "google_project_iam_custom_role" "deployer_mig" {
+  depends_on  = [google_project_iam_member.tf_apply["roles/iam.roleAdmin"]]
   role_id     = "profileAppMigDeployer"
   title       = "Employee Dashboard MIG Deployer"
   description = "Create release templates and roll the employee dashboard regional MIG."

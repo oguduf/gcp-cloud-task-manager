@@ -71,8 +71,7 @@ resource "google_project_iam_member" "deployer_compute_viewer" {
   member  = google_service_account.deployer.member
 }
 
-# The custom role is created by bootstrap; bind it here after the deployer SA
-# exists so bootstrap never grants IAM to a not-yet-created principal.
+# Bootstrap creates the project-scoped custom role before this root binds it.
 resource "google_project_iam_member" "deployer_mig" {
   project = var.project_id
   role    = "projects/${var.project_id}/roles/profileAppMigDeployer"
