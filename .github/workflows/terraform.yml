@@ -81,7 +81,7 @@ jobs:
         run: terraform fmt -check -recursive -diff
 
       - name: terraform init
-        run: terraform init -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}"
+        run: terraform init -lock=false -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}"
 
       - name: terraform validate
         run: terraform validate -no-color
