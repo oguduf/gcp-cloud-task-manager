@@ -184,7 +184,7 @@ jobs:
           healthy_mig=false
           for attempt in $(seq 1 40); do
             INSTANCES="$(gcloud compute instance-groups managed list-instances "$MIG" --region "$REGION" --format=json)"
-            if printf '%s' "$INSTANCES" | python3 -c 'import json,sys; items=json.load(sys.stdin); healthy=sum(1 for item in items if item.get("instanceStatus")=="RUNNING" and item.get("currentAction")=="NONE" and any(h.get("healthState")=="HEALTHY" for h in item.get("instanceHealth",[]))); print(f"Healthy MIG instances: {healthy}/{len(items)}"); sys.exit(0 if healthy >= 2 else 1)'; then
+            if printf '%s' "$INSTANCES" | python3 -c 'import json,sys; items=json.load(sys.stdin); healthy=sum(1 for item in items if item.get("instanceStatus")=="RUNNING" and item.get("currentAction")=="NONE" and any(h.get("detailedHealthState", h.get("healthState"))=="HEALTHY" for h in item.get("instanceHealth",[]))); print(f"Healthy MIG instances: {healthy}/{len(items)}"); sys.exit(0 if healthy >= 2 else 1)'; then
               healthy_mig=true
               break
             fi
