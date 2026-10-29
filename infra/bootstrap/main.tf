@@ -198,15 +198,35 @@ resource "google_project_iam_custom_role" "deployer_mig" {
   ]
 }
 
-# Plan reads state (runs with -lock=false); apply reads, writes and locks it.
+# Plan reads existing state and can create an initial state object only for the
+# two Terraform prefixes below; apply can read and update state.
 resource "google_storage_bucket_iam_member" "tf_plan_state" {
   bucket = google_storage_bucket.tfstate.name
   role   = "roles/storage.objectViewer"
   member = google_service_account.tf_plan.member
 }
 
-# GCS state initialization and operations need lock-object access. Restrict the
-# plan identity to the lock files used by the two workflow state prefixes.
+# A fresh GCS backend has no state object yet. Let plan create those two initial
+# state objects, without granting it permission to overwrite or delete state.
+resource "google_storage_bucket_iam_member" "tf_plan_state_initial" {
+  for_each = toset([
+    "profile-app/bootstrap/default.tfstate",
+    "profile-app/main/default.tfstate",
+  ])
+
+  bucket = google_storage_bucket.tfstate.name
+  role   = "roles/storage.objectCreator"
+  member = google_service_account.tf_plan.member
+
+  condition {
+    title       = "terraform-plan-state-create-${replace(each.value, "/", "-")}"
+    description = "Allow the plan identity to create only this initial Terraform state object."
+    expression  = "resource.type == 'storage.googleapis.com/Object' && resource.name == 'projects/_/buckets/${local.state_bucket}/objects/${each.value}'"
+  }
+}
+
+# GCS state locking needs object access. Restrict plan to the two lock files
+# used by the workflow state prefixes.
 resource "google_storage_bucket_iam_member" "tf_plan_state_lock" {
   for_each = toset([
     "profile-app/bootstrap/default.tflock",
