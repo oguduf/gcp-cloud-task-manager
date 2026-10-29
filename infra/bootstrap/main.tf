@@ -21,8 +21,8 @@ locals {
     }
   }
 
-  # Read-only: enough for `terraform plan` (PRs can run modified workflow code,
-  # so this identity must not be able to change anything).
+  # Plan can read state and manage only the dedicated lock objects below. PR code
+  # remains unable to change infrastructure resources.
   tf_plan_roles = [
     "roles/viewer",
     "roles/iam.securityReviewer", # read IAM policies on project, SAs, VM, repo
@@ -205,6 +205,24 @@ resource "google_storage_bucket_iam_member" "tf_plan_state" {
   member = google_service_account.tf_plan.member
 }
 
+# GCS state initialization and operations need lock-object access. Restrict the
+# plan identity to the lock files used by the two workflow state prefixes.
+resource "google_storage_bucket_iam_member" "tf_plan_state_lock" {
+  for_each = toset([
+    "profile-app/bootstrap/default.tflock",
+    "profile-app/main/default.tflock",
+  ])
+
+  bucket = google_storage_bucket.tfstate.name
+  role   = "roles/storage.objectUser"
+  member = google_service_account.tf_plan.member
+
+  condition {
+    title       = "terraform-plan-lock-${replace(each.value, "/", "-")}"
+    description = "Allow the plan identity to manage only this Terraform state lock object."
+    expression  = "resource.type == 'storage.googleapis.com/Object' && resource.name == 'projects/_/buckets/${local.state_bucket}/objects/${each.value}'"
+  }
+}
 resource "google_storage_bucket_iam_member" "tf_apply_state" {
   bucket = google_storage_bucket.tfstate.name
   role   = "roles/storage.objectAdmin"
