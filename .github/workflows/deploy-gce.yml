@@ -136,7 +136,27 @@ jobs:
             "https://compute.googleapis.com/compute/v1/projects/${PROJECT_ID}/global/instanceTemplates" \
             > "$OPERATION"
           OPERATION_NAME="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["name"])' "$OPERATION")"
-          gcloud compute operations wait "$OPERATION_NAME" --global --quiet
+          OPERATION_STATUS="PENDING"
+          for attempt in $(seq 1 60); do
+            curl --fail-with-body --silent --show-error \
+              -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+              "https://compute.googleapis.com/compute/v1/projects/${PROJECT_ID}/global/operations/${OPERATION_NAME}" \
+              > "$OPERATION"
+            OPERATION_STATUS="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("status", "UNKNOWN"))' "$OPERATION")"
+            if [ "$OPERATION_STATUS" = "DONE" ]; then
+              python3 - "$OPERATION" <<'PY'
+          import json
+          import sys
+          operation = json.load(open(sys.argv[1]))
+          errors = operation.get("error", {}).get("errors", [])
+          if errors:
+              raise SystemExit("; ".join(error.get("message", str(error)) for error in errors))
+          PY
+              break
+            fi
+            sleep 5
+          done
+          test "$OPERATION_STATUS" = "DONE"
           gcloud compute instance-groups managed rolling-action start-update "$MIG" \
             --region "$REGION" \
             --version="template=${TEMPLATE}" \
