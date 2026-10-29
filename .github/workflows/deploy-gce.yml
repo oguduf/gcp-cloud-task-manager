@@ -180,7 +180,7 @@ jobs:
             --max-surge=3 \
             --max-unavailable=0
           gcloud compute instance-groups managed wait-until "$MIG" \
-            --region "$REGION" --stable --timeout=20m
+            --region "$REGION" --stable --timeout=1200
           healthy_mig=false
           for attempt in $(seq 1 40); do
             INSTANCES="$(gcloud compute instance-groups managed list-instances "$MIG" --region "$REGION" --format=json)"
