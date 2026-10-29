@@ -86,13 +86,13 @@ jobs:
       - name: terraform validate
         run: terraform validate -no-color
 
-      # -lock=false: this identity can only read the state bucket.
+      # The plan identity can lock only the exact GCS lock objects granted by bootstrap.
       # -detailed-exitcode: 0 = no changes, 2 = changes, 1 = error
       - name: terraform plan
         id: plan
         run: |
           set +e
-          terraform plan -lock=false -detailed-exitcode -no-color -out=tfplan > plan.log 2>&1
+          terraform plan -detailed-exitcode -no-color -out=tfplan > plan.log 2>&1
           code=$?
           set -e
           cat plan.log
