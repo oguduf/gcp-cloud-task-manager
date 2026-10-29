@@ -93,13 +93,52 @@ jobs:
             --sort-by='~creationTimestamp' --limit=1 --format='value(name)')"
           test -n "$BASE_TEMPLATE"
           TEMPLATE="${BASE_TEMPLATE_PREFIX%-template-}-release-${GITHUB_SHA:0:12}"
-          gcloud compute instance-templates create "$TEMPLATE" \
-            --source-instance-template="$BASE_TEMPLATE" \
-            --metadata="app-backend-image=${BACKEND_IMAGE}:${GITHUB_SHA},app-frontend-image=${FRONTEND_IMAGE}:${GITHUB_SHA}"
+          BASE_CONFIG="$(mktemp)"
+          RELEASE_CONFIG="$(mktemp)"
+          gcloud compute instance-templates export "$BASE_TEMPLATE" \
+            --global --destination="$BASE_CONFIG"
+          python3 - "$BASE_CONFIG" "$RELEASE_CONFIG" "$TEMPLATE" \
+            "${BACKEND_IMAGE}:${GITHUB_SHA}" "${FRONTEND_IMAGE}:${GITHUB_SHA}" <<'PY'
+          import json
+          import re
+          import sys
+          from pathlib import Path
+
+          source, destination, name, backend_image, frontend_image = sys.argv[1:]
+          text = Path(source).read_text()
+          text, count = re.subn(r"(?m)^name:.*$", f"name: {name}", text, count=1)
+          if count != 1:
+              raise SystemExit("Exported instance template did not contain exactly one name")
+
+          lines = text.splitlines()
+
+          def set_metadata(key, value):
+              key_pattern = re.compile(r"^([ \\t]*)-\\s+key:\\s*" + re.escape(key) + r"\\s*$")
+              for index, line in enumerate(lines):
+                  match = key_pattern.match(line)
+                  if not match:
+                      continue
+                  for value_index in range(index + 1, len(lines)):
+                      if re.match(r"^\\s*-\\s+key:", lines[value_index]):
+                          break
+                      value_match = re.match(r"^(\\s*)value\\s*:", lines[value_index])
+                      if value_match:
+                          lines[value_index] = f"{value_match.group(1)}value: {json.dumps(value)}"
+                          return
+                  raise SystemExit(f"Metadata key {key} has no value in exported template")
+              raise SystemExit(f"Metadata key {key} was not present in exported template")
+
+          set_metadata("app-backend-image", backend_image)
+          set_metadata("app-frontend-image", frontend_image)
+          Path(destination).write_text("\\n".join(lines) + "\\n")
+          PY
+          gcloud compute instance-templates import "$TEMPLATE" \
+            --global --source="$RELEASE_CONFIG" --quiet
+          rm -f "$BASE_CONFIG" "$RELEASE_CONFIG"
           gcloud compute instance-groups managed rolling-action start-update "$MIG" \
             --region "$REGION" \
             --version="template=${TEMPLATE}" \
-            --max-surge=1 \
+            --max-surge=3 \
             --max-unavailable=0
           gcloud compute instance-groups managed wait-until "$MIG" \
             --region "$REGION" --stable --timeout=20m
