@@ -1,251 +1,148 @@
-# Employee Admin Dashboard on a Regional MIG (GitHub Actions + OIDC)
+# Employee Admin Dashboard on Google Cloud
 
-A three-tier app served by a private regional managed instance group (MIG):
-an **nginx frontend** (static dashboard + reverse proxy), a **Node/Express backend API**,
-and **Firestore with MongoDB compatibility** as the database. A global external
-Application Load Balancer routes public traffic to the MIG. The existing standalone
-VM stays attached as a temporary backend during migration.
+A three-tier employee dashboard: a global external Application Load Balancer serves an nginx frontend on a private regional managed instance group (MIG); nginx proxies requests to a Node.js/Express API; the API stores employee records in Firestore Enterprise with MongoDB compatibility.
 
-> **Security note: the dashboard has no authentication yet.** Anyone who can reach the load
-> balancer IP can read and change employees. Identity-Aware Proxy on the load balancer is a
-> planned follow-up. Do not put real employee data in it until then.
+The project also keeps a standalone VM attached to the load balancer as a temporary migration backend. See [the migration plan](docs/migration-plan.md) before removing it.
+
+> **Security:** The dashboard currently has no user authentication. Anyone who can reach its load-balancer address can view and modify employee records. Use sample data only until authentication (for example, Identity-Aware Proxy) is implemented and verified.
+
+## Architecture
 
 ```mermaid
 flowchart LR
-  browser((Browser)) -- "HTTP :80" --> lb[External HTTP load balancer]
-  subgraph VPC[Private subnet · regional MIG · min 2 zones]
-    subgraph VM1[Private MIG instance 1]
-      fe1["frontend (nginx)<br/>port 80"] -- "/api/* and /healthz<br/>http://backend:3000" --> be1["backend (Node/Express)"]
+  user((Browser)) -->|HTTP :80, HTTPS when domain/TLS configured| lb[Global external Application Load Balancer]
+  subgraph vpc[Custom VPC · private subnet]
+    subgraph mig[Regional MIG · multiple zones]
+      nginx[nginx static frontend :80] -->|/api and /healthz| api[Node.js / Express :3000]
     end
-    subgraph VM2[Private MIG instance 2+]
-      fe2["frontend (nginx)<br/>port 80"] -- "/api/* and /healthz<br/>http://backend:3000" --> be2["backend (Node/Express)"]
-    end
+    legacy[Temporary standalone VM backend]
   end
-  lb --> VM1
-  lb --> VM2
-  be1 -- "MONGODB-OIDC, TLS 443" --> fs[(Firestore<br/>employees collection)]
-  be2 -- "MONGODB-OIDC, TLS 443" --> fs
+  lb --> mig
+  lb -. during migration .-> legacy
+  api -->|MongoDB compatibility · OIDC · TLS 443| fs[(Firestore Enterprise)]
+  mig -->|outbound image pulls| nat[Cloud NAT]
+  nat --> ar[(Artifact Registry)]
+  gh[GitHub Actions] -->|OIDC / Workload Identity Federation| gcp[Google Cloud]
+  gh -->|build and push images| ar
+  gh -->|roll out release template| mig
 ```
 
-Keyless end to end:
-- GitHub Actions authenticates to Google Cloud with **Workload Identity Federation (OIDC)**.
-  No service-account JSON key or SSH key is stored in GitHub.
-- The app authenticates to Firestore with **MONGODB-OIDC** as the VM's service account.
-  There is no database username or password anywhere.
+The load balancer has a **public global IP**; it is not placed in a subnet. The MIG VMs have private addresses in `profile-app-subnet`. Private Google Access allows Google API access; Cloud NAT provides outbound internet access for image and package downloads. Firestore is a managed service outside the VPC, not a VM in the private subnet.
 
-```mermaid
-flowchart LR
-  subgraph GH[GitHub]
-    repo[Repository<br/>push to main] --> runner[Actions runner<br/>id-token: write]
-  end
-  subgraph GCP[Google Cloud project]
-    wif[Workload Identity Federation<br/>repo == yours && ref == main]
-    sa[gh-deployer SA]
-    ar[(Artifact Registry)]
-    lb[External Application Load Balancer<br/>public HTTP IP]
-    nat[Cloud NAT<br/>outbound only]
-    fs[(Firestore<br/>MongoDB compat<br/>db: user-account)]
-    subgraph MIG[Private regional MIG · min 2 instances]
-      app[nginx frontend :80 -> Node backend :3000] -- ID token aud=FIRESTORE --> md[metadata server]
-    end
-  end
-  users((Users)) -- HTTP :80 --> lb --> MIG
-  runner -- "1 OIDC JWT" --> wif
-  wif -- "2 impersonate" --> sa
-  sa -- "3 short-lived token" --> runner
-  runner -- "4 docker push" --> ar
-  runner -- "5 clone release template and roll MIG" --> MIG
-  MIG -- "pull images via NAT" --> nat --> ar
-  app -- "8 MONGODB-OIDC, TLS 443" --> fs
-```
+GitHub Actions uses Workload Identity Federation and short-lived credentials, not service-account key files. The application uses its VM service account and MongoDB OIDC authentication to connect to Firestore.
 
-## Layout
+## Components and repository layout
 
-| Path | What it is |
+| Path | Purpose |
 |---|---|
-| `backend/` | Express API (`src/`), tests (`test/`), seed script (`scripts/seed.js`), Dockerfile |
-| `frontend/` | Static dashboard (`public/`, vanilla ES modules, no build step), `nginx.conf`, Dockerfile |
-| `.github/workflows/deploy-gce.yml` | App: test → build two immutable images → push to Artifact Registry → roll the regional MIG → smoke test |
-| `.github/workflows/ci.yml` | Backend tests on pull requests (no GCP auth) |
-| `.github/workflows/terraform.yml` | Infra: plan on PRs (posted as a comment) → approve → apply on `main` |
-| `infra/bootstrap/` | Run once by hand: state bucket, GitHub OIDC trust, `tf-plan` / `tf-apply` service accounts |
-| `infra/terraform/` | App infrastructure: private subnet, regional MIG and temporary legacy VM backend, external load balancer, Cloud NAT, Firestore, Artifact Registry, IAM, monitoring |
-| `infra/vm-startup.sh` | Startup helper retained for the legacy VM during cutover |
-| `infra/mig-startup.sh` | Starts the nginx and Node containers on each private MIG instance and sends container logs to Cloud Logging |
-| `deploy/docker-compose.yml`, `deploy/deploy.sh` | Legacy VM deployment files retained for migration rollback; the release workflow updates the MIG |
-| `docker-compose.yaml` | Local development only: MongoDB + backend + frontend on http://localhost:8080 |
+| `backend/` | Node.js/Express API, validation, tests, seed script, and container build |
+| `frontend/` | Static dashboard, nginx reverse proxy configuration, and container build |
+| `infra/terraform/` | GCP APIs, VPC/subnet, firewall, MIG/template/autoscaling, load balancer, Firestore, Artifact Registry, IAM, and monitoring |
+| `infra/bootstrap/` | One-time Terraform for remote state, GitHub OIDC pool/providers, service accounts, and IAM setup |
+| `infra/mig-startup.sh` | Starts the frontend and backend containers on MIG instances and sends container logs to Cloud Logging |
+| `infra/vm-startup.sh` | Startup support for the temporary standalone VM |
+| `deploy/` | Legacy VM deployment and rollback files |
+| `docker-compose.yaml` | Local development stack: frontend, backend, and MongoDB |
+| `.github/workflows/ci.yml` | Backend checks for pull requests |
+| `.github/workflows/terraform.yml` | Terraform plan and gated apply workflow |
+| `.github/workflows/deploy-gce.yml` | Build/push application images and roll the MIG |
+| `.github/workflows/bootstrap.yml` | Manual bootstrap workflow |
+| `.github/workflows/oidc-check.yml` | Diagnostic workflow for GitHub-to-GCP OIDC |
+| `docs/` | [Architecture](docs/architecture.md), [deployment](docs/deployment.md), [migration](docs/migration-plan.md), [monitoring](docs/monitoring.md), and [security](docs/security.md) guides |
 
-## CI/CD
+## Request flow and API
 
-```mermaid
-flowchart LR
-  pr[Pull request<br/>infra/terraform/**] --> plan1[terraform plan<br/>tf-plan, read-only] --> comment[Plan posted<br/>as PR comment]
-  merge[Merge to main] --> plan2[terraform plan<br/>tf-plan] --> gate{{Approve in<br/>environment 'infra'}} --> apply[terraform apply<br/>saved plan, tf-apply]
-  prb[Pull request<br/>backend/**] --> ci[ci.yml<br/>backend tests]
-  push[Push to main<br/>backend/** frontend/** deploy/**] --> test[backend tests] --> deploy[build images<br/>roll regional MIG]
-```
+The browser reaches nginx through the load balancer. Nginx serves the static UI and proxies `/api/*` and `/healthz` to the backend. The backend accesses Firestore over TLS using MongoDB compatibility.
 
-Each job logs in with its own Workload Identity provider and service account:
-
-| Job | Provider accepts tokens from | Service account | Can |
-|---|---|---|---|
-| Terraform plan | PRs in this repo, or `main` | `tf-plan` | read the project and the state (plan runs with `-lock=false`) |
-| Terraform apply | `main` **and** environment `infra` | `tf-apply` | create/change everything in `infra/terraform` |
-| App deploy | `main` | `gh-deployer` | push images and roll the regional MIG |
-
-Each provider stamps its tokens with `attribute.purpose`, and each service account trusts
-only its own purpose, so a pull-request token can never be used to apply or deploy.
-
-## Setup (once)
-
-1. **Push this folder to a GitHub repo.**
-2. **Bootstrap** (Cloud Shell or your machine, with permission to create the
-   resources and IAM grants in `infra/bootstrap`):
-   ```bash
-   cd infra/bootstrap
-   cp terraform.tfvars.example terraform.tfvars   # set project_id and github_repo
-   # On a local machine only: gcloud auth application-default login
-   terraform init
-   terraform plan
-   terraform apply                                  # only after reviewing the plan
-   ```
-   On Windows PowerShell, use `Copy-Item .\terraform.tfvars.example .\terraform.tfvars`
-   instead of `cp`. `terraform.tfvars` is ignored by Git. `terraform init`
-   installs providers; **only `terraform apply` creates the Workload Identity
-   Pool/providers, service accounts, state bucket, and IAM bindings**. Keep the
-   bootstrap state safe so future changes do not attempt to recreate them.
-   The bootstrap uses its own `github-task-manager` Workload Identity Pool.
-   Do not point this repo at an existing pool owned by another repository.
-3. **Configure GitHub**: run `terraform output github_variables` in
-   `infra/bootstrap` and add each entry under repository **Settings → Secrets
-   and variables → Actions → Variables**. The output contains the actual
-   project number and resource names; do not use placeholder values. If you
-   use the GitHub CLI and want the additional branch/environment policy changes,
-   review this generated script before running it:
-   ```bash
-   terraform output -raw gh_setup_commands
-   ```
-   Before merging to `main`, create the `infra` GitHub environment with a
-   required reviewer. The Terraform apply job must not run without this gate.
-   The optional script sets repository variables (none are secrets), protects
-   `main` so changes go through pull requests, and configures that environment.
-   Cloud Build's GitHub repository connection is
-   separate and does not create this GitHub Actions OIDC trust.
-   Required reviewers and branch protection on a **private** repo need a paid GitHub plan
-   (Pro/Team); they are free on public repos.
-4. **Merge `dev` into `main`.** GitHub only offers these manual workflows after
-   their files exist on the default branch. The Terraform workflow runs on the
-   merge; read its plan in the run summary, then approve the `apply` job.
-5. **First app deploy:** after Terraform succeeds, manually run **Build & deploy
-   to GCE** from `main`. The automatic deploy job stays skipped until you set
-   the repository Actions variable `AUTO_DEPLOY` to `true`. Set it only after
-   the first manual deployment succeeds; later pushes to `main` then deploy.
-
-Optional but recommended: commit `infra/terraform/.terraform.lock.hcl` (create it with
-`terraform init -backend=false` in that folder) so CI always uses the same provider versions.
-
-### Changing infrastructure
-
-Open a pull request that changes `infra/terraform/`. The plan appears as a comment on the PR.
-Merge it, then approve the `apply` job in the run. Apply uses the exact plan you approved;
-if the state changed in between, Terraform refuses and nothing is changed.
-
-### Tearing down
-
-The pipeline never destroys. From your machine:
-```bash
-cd infra/terraform && terraform init -backend-config="bucket=<project>-tfstate"
-terraform destroy -var project_id=<project> -var wif_pool_name=<GCP_WIF_POOL value>
-cd ../bootstrap && terraform destroy   # remove prevent_destroy on the bucket first
-```
-A deleted Workload Identity Pool ID stays reserved for 30 days.
-
-## Networking
-
-GCP's external Application Load Balancer has a public global IP; it is **not
-inside a public subnet**. The `profile-app-subnet` is private and hosts the
-regional MIG instances. During cutover, the existing standalone VM remains a
-second backend. Firestore is a managed service outside the VPC, reached from the
-private subnet through Private Google Access.
-
-```mermaid
-flowchart LR
-  browser[Browser] -- HTTP :80 --> lb[External Application Load Balancer]
-  lb --> mig[Regional MIG · private VMs across zones]
-  mig --> legacy[Legacy VM · temporary backend]
-  mig -- "TLS :443 / Private Google Access" --> fs[(Firestore)]
-  mig -- outbound only --> nat[Cloud NAT] --> internet[Docker and package downloads]
-  github[GitHub Actions] -- OIDC + rolling update --> mig
-```
-
-| Resource | Name | Settings |
+| Method | Path | Purpose |
 |---|---|---|
-| VPC | `profile-app-vpc` | custom subnet mode (no default-network open rules) |
-| Subnet | `profile-app-subnet` | private VM subnet `10.10.0.0/24`, `us-east1`, Private Google Access on |
-| Load balancer | `profile-app-http` | public global HTTP `:80` → regional MIG and temporary legacy instance groups; `/healthz` check |
-| Firewall | `profile-app-allow-http` | ingress `tcp:80` only from Google load-balancer and health-check ranges → VM service account |
-| Firewall | `profile-app-allow-iap-ssh` | ingress `tcp:22` from `35.235.240.0/20` (IAP) → VM service account for administration |
-| Firewall | implied | deny all other ingress, allow all egress |
-| Address | `profile-app-lb-ip` | global static external IP on the load balancer; VM internal IP `10.10.0.10`, no external IP |
-| Cloud NAT | `profile-app-nat` | outbound internet access for the private VM, not inbound access |
+| GET | `/healthz` | Lightweight HTTP health endpoint for load-balancer checks |
+| GET | `/api/health` | Checks backend-to-database connectivity |
+| GET | `/api/meta` | Departments, statuses, and instance metadata |
+| GET | `/api/employees` | List employees; supports exact-match `department` and `status` filters |
+| GET | `/api/employees/:id` | Fetch one employee |
+| POST | `/api/employees` | Create an employee |
+| PUT | `/api/employees/:id` | Partially update an employee |
+| DELETE | `/api/employees/:id` | Delete an employee |
 
-On each MIG instance, Docker publishes host `:80 → frontend:80`; the backend
-(`:3000`) is reachable only from nginx over the private Docker network. The
-database is a managed service reached outbound on TLS 443, so it needs no inbound
-firewall rule. The old VM remains attached until at least two MIG instances pass
-health and application/database smoke tests. Review the Terraform plan before
-applying; the existing VM and Firestore database must not be replaced or deleted.
+Employee data is stored in the `employees` collection. The API validates and normalizes fields; see `backend/src` for the authoritative schema and behavior.
 
-## Database: Firestore with MongoDB compatibility
+## CI/CD and identity
 
-- Enterprise-edition Firestore database `user-account` in `us-east1`, created by Terraform (`infra/terraform/firestore.tf`).
-- The backend still uses the official `mongodb` Node.js driver (6.x). Only the connection string changed:
-  ```
-  mongodb://<uid>.<location>.firestore.goog:443/user-account?loadBalanced=true&tls=true&retryWrites=false
-    &authMechanism=MONGODB-OIDC&authMechanismProperties=ENVIRONMENT:gcp,TOKEN_RESOURCE:FIRESTORE
-  ```
-- The connection string holds no secret. It is stored as the instance-template metadata key `mongo-url` and passed to the backend container at startup.
-- The VM service account has `roles/datastore.user`, limited by an IAM condition to this one database.
-- Employees live in the `employees` collection (string UUID `_id`, only whitelisted fields stored).
-  Queries are exact-match filters only, with sorting done in the backend, to stay within what
-  Firestore's MongoDB compatibility supports.
-- Without `MONGO_URL` set, the backend falls back to `mongodb://admin:password@localhost:27017`.
+### Terraform
 
-## API
+- Pull requests affecting `infra/terraform/` run a plan with the read-only `tf-plan` identity.
+- Changes merged to `main` run a new plan. The `apply` job waits for approval in the GitHub `infra` environment, then applies the saved plan with `tf-apply`.
+- Create the `infra` environment and configure its required reviewer before relying on this gate.
 
-All routes are served through the frontend's nginx (`/api/*` and `/healthz` are proxied to the backend).
-Every response carries an `X-Served-By` header, and the backend logs one JSON line per request.
+### Application release
 
-| Method | Path | Description |
-|---|---|---|
-| GET | `/healthz` | Liveness for the load balancer: `200 ok`, no database call |
-| GET | `/api/health` | Pings Firestore: `200 {status, database, instance}`, or `503` if unreachable |
-| GET | `/api/meta` | Departments, statuses, instance name |
-| GET | `/api/employees?department=&status=` | List (exact-match filters, max 1000, sorted by last then first name) |
-| GET | `/api/employees/:id` | One employee, `404` if missing |
-| POST | `/api/employees` | Create (`201`); `400 {error, fields}` on validation errors, `409` on duplicate email |
-| PUT | `/api/employees/:id` | Partial update; same errors as create, plus `404` |
-| DELETE | `/api/employees/:id` | Delete (`204`), `404` if missing |
+- The release workflow tests the backend, builds SHA-tagged frontend/backend images, pushes them to Artifact Registry, updates the regional MIG, and checks the public endpoints.
+- The workflow is configured for manual dispatch from `main`. Automatic deployment on matching pushes stays disabled until the repository Actions variable `AUTO_DEPLOY` is set to `true`.
+- Run the first application release manually after Terraform has created the baseline infrastructure.
+- Terraform owns the baseline instance template and MIG configuration; the release workflow creates versioned release templates and rolls the MIG. Keep old release images/templates for the rollback window.
 
-Employee fields: `firstName`, `lastName` (1–60 chars), `email` (valid, lowercased, unique),
-`department` (Engineering, Sales, Marketing, Finance, HR, Operations, Support), `role` (1–80),
-`hireDate` (`YYYY-MM-DD`), `status` (`active` | `on_leave` | `inactive`, default `active`),
-plus `id`, `createdAt`, `updatedAt` set by the server.
+Each workflow uses its dedicated Workload Identity provider and service account. Repository variables are identifiers/configuration, not credentials; do not add service-account JSON keys.
+
+> **Local branch note:** This README was reviewed in the local `dev` checkout. Its `deploy-gce.yml` currently differs from the successfully updated `main` workflow: it uses an older health-field check and a 20-minute MIG wait. Sync the local branch with the current `main` workflow before relying on a local copy of that workflow. The documented deployment behavior describes the intended/current main-branch release flow.
+
+## First-time setup
+
+1. Push the repository to GitHub and select the intended Google Cloud project.
+2. Review [bootstrap instructions](infra/bootstrap/README.md). Set `project_id` and `github_repo` in the ignored local `terraform.tfvars`; do not commit it.
+3. Run bootstrap only after reviewing its Terraform plan. It creates the state bucket, Workload Identity resources, service accounts, and IAM bindings.
+4. Publish the exact outputs from `terraform output github_variables` as GitHub Actions repository variables. Use the actual generated project number and resource names; do not guess or copy values from an old project.
+5. Configure GitHub branch protection and the `infra` environment approval gate.
+6. Merge the infrastructure configuration to `main`; review the plan and approve the gated apply.
+7. Manually run **Build & deploy to GCE** from `main`. Confirm the workflow's smoke tests pass before enabling `AUTO_DEPLOY=true`.
+
+See [deployment guide](docs/deployment.md) for migration order, state handling, variables, and rollback steps. Do not run Terraform against a different state bucket/prefix or change backend configuration casually; that can make Terraform treat existing infrastructure as unmanaged.
 
 ## Local development
 
-Requires Docker Desktop.
+Requirements: Docker Desktop, and Node.js 22 if running backend tests directly.
 
-```bash
+```sh
 docker compose up --build
-docker compose exec backend npm run seed     # idempotent: adds ~10 sample employees
+docker compose exec backend npm run seed
 ```
 
-Open http://localhost:8080. MongoDB runs locally with `admin` / `password`.
-Backend tests (Node 22): `cd backend && npm ci && npm test`.
+Open [http://localhost:8080](http://localhost:8080). The local stack uses MongoDB with development-only credentials; these are not GCP credentials.
 
-## Operating
+Run backend tests:
 
-- Browse the data in the console under **Firestore → user-account → Firestore Studio**, or with
-  `mongosh` using the same connection string from a machine with `roles/datastore.user`.
-- Roll back: rerun a previous successful deployment workflow so the MIG rolls to its SHA-pinned images. Keep the associated Artifact Registry images available throughout the rollback window.
+```sh
+cd backend
+npm ci
+npm test
+```
+
+Terraform validation without connecting to the remote state:
+
+```sh
+cd infra/terraform
+terraform fmt -check -recursive
+terraform init -backend=false
+terraform validate
+```
+
+## Networking and security notes
+
+- The MIG subnet is private; instances have no public IP addresses.
+- The global load balancer accepts public HTTP on port 80. HTTPS requires a configured domain, DNS pointing to the load-balancer IP, and managed certificate configuration.
+- Firewall ingress is limited to load-balancer/health-check traffic and IAP SSH for administration.
+- Firestore is outside the VPC. The application reaches it through Google APIs using Private Google Access and IAM; there is no database inbound firewall rule.
+- The dashboard has no end-user authentication yet. Network reachability to the load balancer currently grants access to employee CRUD operations.
+- Keep the legacy VM/backend until the MIG and database health checks pass and the migration plan says it is safe to remove.
+
+## Observability and operations
+
+Terraform provisions Cloud Monitoring resources and log groups; application/container logs are sent to Cloud Logging. See [monitoring guide](docs/monitoring.md) for dashboards, alert policies, and notification-channel configuration.
+
+The app URL and monitoring dashboard resource are Terraform outputs. Retrieve them from the Terraform state after apply; use the load-balancer URL output to open the application. For release rollback, rerun a known-good deployment or roll the MIG to a retained release template, then verify `/healthz`, `/api/health`, and the dashboard.
+
+## Cost and cleanup
+
+The load balancer, regional MIG instances, Cloud NAT, Firestore, Artifact Registry, logs, and monitoring can incur charges. Review resource sizing, scaling limits, retention, and budget alerts for the selected project.
+
+The workflows do not destroy infrastructure. Before cleanup, review [deployment](docs/deployment.md) and [migration](docs/migration-plan.md), confirm backups/retention needs, and inspect the Terraform destroy plan. Do not delete the state bucket until infrastructure teardown is complete.
