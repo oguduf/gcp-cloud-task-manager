@@ -1,4 +1,5 @@
 resource "google_logging_metric" "app_errors" {
+  depends_on  = [google_project_iam_member.tf_apply_observability]
   name        = "${var.name}-app-errors"
   description = "Structured application error records emitted by the Docker app."
   filter      = "resource.type=\"gce_instance\" AND severity=\"ERROR\""
@@ -11,6 +12,7 @@ resource "google_logging_metric" "app_errors" {
 }
 
 resource "google_logging_metric" "mig_unhealthy_events" {
+  depends_on  = [google_project_iam_member.tf_apply_observability]
   name        = "${var.name}-mig-unhealthy-events"
   description = "Managed instance health transitions to UNHEALTHY."
   filter = join(" AND ", [
@@ -28,6 +30,7 @@ resource "google_logging_metric" "mig_unhealthy_events" {
 }
 
 resource "google_monitoring_uptime_check_config" "app" {
+  depends_on   = [google_project_iam_member.tf_apply_observability]
   display_name = "${var.name} public health"
   timeout      = "10s"
   period       = "60s"
@@ -54,6 +57,7 @@ locals {
 }
 
 resource "google_monitoring_dashboard" "app" {
+  depends_on = [google_project_iam_member.tf_apply_observability]
   dashboard_json = jsonencode({
     displayName = "${var.name} service dashboard"
     gridLayout = {
@@ -145,6 +149,7 @@ resource "google_monitoring_dashboard" "app" {
 }
 
 resource "google_monitoring_alert_policy" "http_5xx" {
+  depends_on            = [google_project_iam_member.tf_apply_observability]
   display_name          = "${var.name} high HTTP 5xx count"
   combiner              = "OR"
   notification_channels = var.alert_notification_channels
@@ -166,6 +171,7 @@ resource "google_monitoring_alert_policy" "http_5xx" {
 }
 
 resource "google_monitoring_alert_policy" "cpu" {
+  depends_on            = [google_project_iam_member.tf_apply_observability]
   display_name          = "${var.name} high VM CPU"
   combiner              = "OR"
   notification_channels = var.alert_notification_channels
@@ -187,6 +193,7 @@ resource "google_monitoring_alert_policy" "cpu" {
 }
 
 resource "google_monitoring_alert_policy" "backend_errors" {
+  depends_on            = [google_project_iam_member.tf_apply_observability]
   display_name          = "${var.name} unhealthy load balancer backends"
   combiner              = "OR"
   notification_channels = var.alert_notification_channels
@@ -207,6 +214,7 @@ resource "google_monitoring_alert_policy" "backend_errors" {
 }
 
 resource "google_monitoring_alert_policy" "uptime" {
+  depends_on            = [google_project_iam_member.tf_apply_observability]
   display_name          = "${var.name} public endpoint unavailable"
   combiner              = "OR"
   notification_channels = var.alert_notification_channels
@@ -227,6 +235,7 @@ resource "google_monitoring_alert_policy" "uptime" {
 }
 
 resource "google_monitoring_alert_policy" "app_errors" {
+  depends_on            = [google_project_iam_member.tf_apply_observability]
   display_name          = "${var.name} application errors"
   combiner              = "OR"
   notification_channels = var.alert_notification_channels
@@ -247,6 +256,7 @@ resource "google_monitoring_alert_policy" "app_errors" {
 }
 
 resource "google_monitoring_alert_policy" "mig_unhealthy" {
+  depends_on            = [google_project_iam_member.tf_apply_observability]
   display_name          = "${var.name} MIG instance unhealthy"
   combiner              = "OR"
   notification_channels = var.alert_notification_channels

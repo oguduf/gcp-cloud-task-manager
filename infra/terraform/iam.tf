@@ -71,9 +71,28 @@ resource "google_project_iam_member" "deployer_compute_viewer" {
   member  = google_service_account.deployer.member
 }
 
-# Bootstrap creates the project-scoped custom role before this root binds it.
+data "google_iam_role" "deployer_mig" {
+  name = "projects/${var.project_id}/roles/profileAppMigDeployer"
+}
+
+# The project owner creates this narrowly scoped role once; Terraform manages its binding.
+resource "google_project_iam_member" "tf_apply_observability" {
+  for_each = toset([
+    "roles/logging.configWriter",
+    "roles/monitoring.alertPolicyEditor",
+    "roles/monitoring.dashboardEditor",
+    "roles/monitoring.uptimeCheckConfigEditor",
+  ])
+
+  project = var.project_id
+  role    = each.value
+  member  = "serviceAccount:tf-apply@${var.project_id}.iam.gserviceaccount.com"
+
+  depends_on = [google_project_service.apis]
+}
+
 resource "google_project_iam_member" "deployer_mig" {
   project = var.project_id
-  role    = "projects/${var.project_id}/roles/profileAppMigDeployer"
+  role    = data.google_iam_role.deployer_mig.name
   member  = google_service_account.deployer.member
 }

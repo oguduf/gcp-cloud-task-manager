@@ -39,14 +39,6 @@ locals {
     "roles/artifactregistry.admin",
     "roles/datastore.owner",
     "roles/iap.admin",
-    # TEMPORARY: required to create the project-scoped deployer role; remove
-    # after the custom role exists and rerun bootstrap apply to revoke this grant.
-    "roles/iam.roleAdmin",
-    # Permissions required to manage the Terraform-owned observability resources.
-    "roles/logging.configWriter",
-    "roles/monitoring.alertPolicyEditor",
-    "roles/monitoring.dashboardEditor",
-    "roles/monitoring.uptimeCheckConfigEditor",
   ]
 }
 
@@ -179,32 +171,6 @@ resource "google_project_iam_member" "tf_apply" {
   project = var.project_id
   role    = each.value
   member  = google_service_account.tf_apply.member
-}
-
-# GitHub's app deploy identity needs only these release operations. The custom
-# Bootstrap owns this custom role. Role administration is granted temporarily
-# to the gated apply identity only to create the role, then removed.
-resource "google_project_iam_custom_role" "deployer_mig" {
-  depends_on  = [google_project_iam_member.tf_apply["roles/iam.roleAdmin"]]
-  role_id     = "profileAppMigDeployer"
-  title       = "Employee Dashboard MIG Deployer"
-  description = "Create release templates and roll the employee dashboard regional MIG."
-  permissions = [
-    "compute.globalAddresses.get",
-    "compute.globalOperations.get",
-    "compute.globalOperations.list",
-    "compute.instanceTemplates.create",
-    "compute.instanceTemplates.get",
-    "compute.instanceTemplates.list",
-    "compute.instanceTemplates.useReadOnly",
-    "compute.instances.get",
-    "compute.instances.list",
-    "compute.instanceGroupManagers.get",
-    "compute.instanceGroupManagers.list",
-    "compute.instanceGroupManagers.update",
-    "compute.regionOperations.get",
-    "compute.regionOperations.list",
-  ]
 }
 
 # Plan reads existing state and can create an initial state object only for the
