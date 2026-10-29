@@ -113,15 +113,15 @@ jobs:
           lines = text.splitlines()
 
           def set_metadata(key, value):
-              key_pattern = re.compile(r"^([ \\t]*)-\\s+key:\\s*" + re.escape(key) + r"\\s*$")
+              key_pattern = re.compile(r"^([ \t]*)-\s+key:\s*" + re.escape(key) + r"\s*$")
               for index, line in enumerate(lines):
                   match = key_pattern.match(line)
                   if not match:
                       continue
                   for value_index in range(index + 1, len(lines)):
-                      if re.match(r"^\\s*-\\s+key:", lines[value_index]):
+                      if re.match(r"^\s*-\s+key:", lines[value_index]):
                           break
-                      value_match = re.match(r"^(\\s*)value\\s*:", lines[value_index])
+                      value_match = re.match(r"^(\s*)value\s*:", lines[value_index])
                       if value_match:
                           lines[value_index] = f"{value_match.group(1)}value: {json.dumps(value)}"
                           return
@@ -130,7 +130,7 @@ jobs:
 
           set_metadata("app-backend-image", backend_image)
           set_metadata("app-frontend-image", frontend_image)
-          Path(destination).write_text("\\n".join(lines) + "\\n")
+          Path(destination).write_text("\n".join(lines) + "\n")
           PY
           gcloud compute instance-templates import "$TEMPLATE" \
             --global --source="$RELEASE_CONFIG" --quiet
