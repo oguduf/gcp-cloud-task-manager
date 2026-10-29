@@ -11,23 +11,6 @@ resource "google_logging_metric" "app_errors" {
   }
 }
 
-resource "google_logging_metric" "mig_unhealthy_events" {
-  depends_on  = [google_project_iam_member.tf_apply_observability]
-  name        = "${var.name}-mig-unhealthy-events"
-  description = "Managed instance health transitions to UNHEALTHY."
-  filter = join(" AND ", [
-    "resource.type=\"gce_instance_group_manager\"",
-    "logName=\"projects/${var.project_id}/logs/compute.googleapis.com%2Finstance_group_manager_events\"",
-    "resource.labels.instance_group_manager_name=\"${var.name}-mig\"",
-    "jsonPayload.instanceHealthStateChange.detailedHealthState=\"UNHEALTHY\"",
-  ])
-
-  metric_descriptor {
-    metric_kind = "DELTA"
-    value_type  = "INT64"
-    unit        = "1"
-  }
-}
 
 resource "google_monitoring_uptime_check_config" "app" {
   depends_on   = [google_project_iam_member.tf_apply_observability]
@@ -110,16 +93,6 @@ resource "google_monitoring_dashboard" "app" {
             timeSeriesQuery = { timeSeriesFilter = {
               filter      = "metric.type=\"monitoring.googleapis.com/uptime_check/check_passed\" AND resource.type=\"uptime_url\""
               aggregation = { alignmentPeriod = "60s", perSeriesAligner = "ALIGN_FRACTION_TRUE" }
-            } }
-          }] }
-        },
-        {
-          title = "MIG unhealthy instance transitions"
-          xyChart = { dataSets = [{
-            plotType = "STACKED_BAR"
-            timeSeriesQuery = { timeSeriesFilter = {
-              filter      = "metric.type=\"logging.googleapis.com/user/${google_logging_metric.mig_unhealthy_events.name}\" AND resource.type=\"gce_instance_group_manager\""
-              aggregation = { alignmentPeriod = "60s", perSeriesAligner = "ALIGN_SUM", crossSeriesReducer = "REDUCE_SUM" }
             } }
           }] }
         },
@@ -255,23 +228,3 @@ resource "google_monitoring_alert_policy" "app_errors" {
   }
 }
 
-resource "google_monitoring_alert_policy" "mig_unhealthy" {
-  depends_on            = [google_project_iam_member.tf_apply_observability]
-  display_name          = "${var.name} MIG instance unhealthy"
-  combiner              = "OR"
-  notification_channels = var.alert_notification_channels
-  conditions {
-    display_name = "MIG health state changes to UNHEALTHY"
-    condition_threshold {
-      filter          = "metric.type=\"logging.googleapis.com/user/${google_logging_metric.mig_unhealthy_events.name}\" AND resource.type=\"gce_instance_group_manager\""
-      comparison      = "COMPARISON_GT"
-      threshold_value = 0
-      duration        = "0s"
-      aggregations {
-        alignment_period   = "60s"
-        per_series_aligner = "ALIGN_SUM"
-      }
-      trigger { count = 1 }
-    }
-  }
-}
